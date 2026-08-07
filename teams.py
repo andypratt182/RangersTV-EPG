@@ -27,7 +27,7 @@ SPFL_TEAMS = {
 
     "heartstv": {
         "name": "Hearts TV",
-        "urn": "urn:bbc:sportsdata:football:team:hearts",
+        "urn": "urn:bbc:sportsdata:football:team:heart-of-midlothian",
     },
 
     "hibstv": {
