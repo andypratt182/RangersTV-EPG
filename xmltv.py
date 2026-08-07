@@ -82,27 +82,27 @@ def create_xmltv(fixtures, filename):
 
 
     # Create LIVE match entries
-for match in fixtures:
+    for match in fixtures:
 
-    kickoff = datetime.strptime(
-        match["kickoff"].replace(" +0000", ""),
-        "%Y%m%d%H%M%S"
-    )
-
-    # Live match duration (2 hours)
-    match_end = kickoff + timedelta(hours=2)
-
-    add_programme(
-        tv,
-        kickoff.strftime("%Y%m%d%H%M%S") + " +0000",
-        match_end.strftime("%Y%m%d%H%M%S") + " +0000",
-        f"LIVE: {match['home']} vs {match['away']}",
-        (
-            f"{match['competition']}\n"
-            f"Venue: {match['stadium']}\n"
-            f"Kick-off: {match['kickoff']}"
+        kickoff = datetime.strptime(
+            match["kickoff"].replace(" +0000", ""),
+            "%Y%m%d%H%M%S"
         )
-    )
+
+        # Live match duration (2 hours)
+        match_end = kickoff + timedelta(hours=2)
+
+        add_programme(
+            tv,
+            kickoff.strftime("%Y%m%d%H%M%S") + " +0000",
+            match_end.strftime("%Y%m%d%H%M%S") + " +0000",
+            f"LIVE: {match['home']} vs {match['away']}",
+            (
+                f"{match['competition']}\n"
+                f"Venue: {match['stadium']}\n"
+                f"Kick-off: {match['kickoff']}"
+            )
+        )
 
 
     Path(filename).parent.mkdir(
@@ -114,4 +114,3 @@ for match in fixtures:
         encoding="utf-8",
         xml_declaration=True
     )
-
