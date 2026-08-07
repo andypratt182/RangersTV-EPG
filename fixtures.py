@@ -11,18 +11,16 @@ BBC_FIXTURES_URL = (
 UK_TZ = ZoneInfo("Europe/London")
 
 
-def get_fixtures(team_urn):
+def get_fixtures(team):
     """
     Get upcoming fixtures for one SPFL team
     from the BBC Sport JSON feed.
     """
 
-    # Use UK date because this is what the BBC
-    # page uses for its fixture window.
+    team_urn = team["urn"]
+
     today = datetime.now(UK_TZ).date()
 
-    # The BBC endpoint has been tested with
-    # this 24-day window.
     start_date = today + timedelta(days=1)
     end_date = today + timedelta(days=24)
 
@@ -48,7 +46,7 @@ def get_fixtures(team_urn):
     if not response.ok:
 
         print(
-            f"BBC request failed for {team_urn}"
+            f"BBC request failed for {team['name']}"
         )
 
         print(
@@ -68,11 +66,12 @@ def get_fixtures(team_urn):
 
         response.raise_for_status()
 
+
     data = response.json()
 
     fixtures = []
 
-    # Walk through the BBC JSON structure.
+
     for event_group in data.get(
         "eventGroups",
         []
@@ -85,44 +84,60 @@ def get_fixtures(team_urn):
 
             competition = secondary_group.get(
                 "displayLabel",
-                "Football",
+                "Football"
             )
+
 
             for event in secondary_group.get(
                 "events",
                 []
             ):
 
-                # BBC supplies the kickoff in UTC.
                 kickoff = datetime.fromisoformat(
                     event["startDateTime"].replace(
                         "Z",
-                        "+00:00",
+                        "+00:00"
                     )
                 )
 
-                # Ignore matches that have already started.
-                if kickoff < datetime.now(timezone.utc):
+
+                if kickoff < datetime.now(
+                    timezone.utc
+                ):
                     continue
 
-                home = event["home"]["fullName"]
-                away = event["away"]["fullName"]
 
                 fixtures.append(
                     {
-                        "home": home,
-                        "away": away,
-                        "competition": competition,
-                        "kickoff": kickoff.strftime(
-                            "%Y%m%d%H%M%S +0000"
-                        ),
+                        "channel": team["name"],
+
+                        "channel_id": None,
+
+                        "home":
+                            event["home"]["fullName"],
+
+                        "away":
+                            event["away"]["fullName"],
+
+                        "competition":
+                            competition,
+
+                        "stadium":
+                            team["stadium"],
+
+                        "kickoff":
+                            kickoff.strftime(
+                                "%Y%m%d%H%M%S +0000"
+                            ),
+
                         "tv": "",
                     }
                 )
 
-    # Sort chronologically.
+
     fixtures.sort(
         key=lambda x: x["kickoff"]
     )
+
 
     return fixtures
