@@ -74,7 +74,7 @@ def create_xmltv(fixtures, filename):
         microsecond=0
     )
 
-    for i in range(180):
+    for i in range(240):
 
         start = aligned_start + timedelta(hours=i)
         stop = start + timedelta(hours=1)
