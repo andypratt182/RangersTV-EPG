@@ -106,3 +106,4 @@ def create_xmltv(fixtures, filename):
         encoding="utf-8",
         xml_declaration=True
     )
+
