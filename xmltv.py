@@ -74,7 +74,12 @@ def xml_time(dt):
 
 def get_next_match(fixtures, channel_id, after_time):
 
-    for match in fixtures:
+    sorted_fixtures = sorted(
+        fixtures,
+        key=lambda x: x["kickoff"]
+    )
+
+    for match in sorted_fixtures:
 
         if match.get("channel_id") != channel_id:
             continue
@@ -106,6 +111,12 @@ def create_next_game_programme(
 
     if next_match:
 
+        title = (
+            f"Next Game: "
+            f"{next_match['home']} vs "
+            f"{next_match['away']}"
+        )
+
         description = (
             f"{next_match['home']} vs "
             f"{next_match['away']}\n"
@@ -119,6 +130,8 @@ def create_next_game_programme(
 
     else:
 
+        title = "Next Game"
+
         description = (
             "No upcoming fixture"
         )
@@ -129,7 +142,7 @@ def create_next_game_programme(
         channel_id,
         xml_time(start),
         xml_time(stop),
-        "Next Game",
+        title,
         description
     )
 
@@ -186,8 +199,6 @@ def create_xmltv(fixtures, filename):
         hours=240
     )
 
-
-    # Create timeline separately for each club
 
     for channel_id in SPFL_TEAMS:
 
@@ -286,4 +297,4 @@ def create_xmltv(fixtures, filename):
         filename,
         encoding="utf-8",
         xml_declaration=True
-    )
+            )
