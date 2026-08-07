@@ -64,7 +64,7 @@ def create_xmltv(fixtures, filename):
         next_game = "No upcoming Rangers fixture"
 
 
-    # Create rolling Next Game entries
+        # Create rolling Next Game entries
     now = datetime.now()
 
     for i in range(180):
@@ -72,13 +72,32 @@ def create_xmltv(fixtures, filename):
         start = now + timedelta(hours=i * 2)
         stop = start + timedelta(hours=2)
 
-        add_programme(
-            tv,
-            start.strftime("%Y%m%d%H%M%S") + " +0000",
-            stop.strftime("%Y%m%d%H%M%S") + " +0000",
-            "Next Game",
-            next_game
-        )
+        overlap = False
+
+        # Prevent Next Game appearing during LIVE match
+        for match in fixtures:
+
+            kickoff = datetime.strptime(
+                match["kickoff"].replace(" +0000", ""),
+                "%Y%m%d%H%M%S"
+            )
+
+            match_end = kickoff + timedelta(hours=2)
+
+            if start < match_end and stop > kickoff:
+                overlap = True
+                break
+
+
+        if not overlap:
+
+            add_programme(
+                tv,
+                start.strftime("%Y%m%d%H%M%S") + " +0000",
+                stop.strftime("%Y%m%d%H%M%S") + " +0000",
+                "Next Game",
+                next_game
+            )
 
 
     # Create LIVE match entries
