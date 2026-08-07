@@ -40,10 +40,10 @@ jobs:
         run: |
           python generator.py
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v4
-        with:
-          path: ./output
+    #  - name: Upload Pages artifact
+    #    uses: actions/upload-pages-artifact@v4
+    #    with:
+    #      path: ./output
 
       - name: Deploy Pages
         id: deployment
