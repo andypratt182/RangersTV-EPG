@@ -1,23 +1,31 @@
 from fixtures import get_fixtures
-from xmltv import create_xmltv
-
-
-RANGERS_URN = (
-    "urn:bbc:sportsdata:football:team:rangers"
-)
+from teams import SPFL_TEAMS
 
 
 if __name__ == "__main__":
 
-    fixtures = get_fixtures(
-        RANGERS_URN
-    )
+    for channel_id, team in SPFL_TEAMS.items():
 
-    create_xmltv(
-        fixtures,
-        "output/rangerstv.xml"
-    )
+        print("\n====================")
+        print(team["name"])
+        print("====================")
 
-    print(
-        "Rangers TV EPG generated successfully"
-    )
+        fixtures = get_fixtures(
+            team["urn"]
+        )
+
+        if not fixtures:
+
+            print("No upcoming fixtures")
+
+            continue
+
+
+        for match in fixtures:
+
+            print(
+                f"{match['kickoff']} - "
+                f"{match['home']} vs "
+                f"{match['away']} - "
+                f"{match['competition']}"
+            )
