@@ -1,4 +1,4 @@
-name: Update Rangers TV EPG
+name: Update SPFL EPG
 
 on:
   schedule:
