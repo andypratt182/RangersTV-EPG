@@ -1,96 +1,86 @@
-import os
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 
 
-API_URL = "https://v3.football.api-sports.io"
-
-# Rangers FC ID in API-Football
-RANGERS_ID = 257
+TEAM_ID = "133602"   # Rangers FC on TheSportsDB
 
 
 def get_fixtures():
 
-    api_key = os.environ.get("API_FOOTBALL_KEY")
-
-    if not api_key:
-        raise Exception("Missing API_FOOTBALL_KEY")
-
-
-    headers = {
-        "x-apisports-key": api_key
-    }
-
-
-    params = {
-    "team": RANGERS_ID,
-    "season": 2024
-    }
-
-    response = requests.get(
-        f"{API_URL}/fixtures",
-        headers=headers,
-        params=params
+    url = (
+        f"https://www.thesportsdb.com/api/v1/json/3/"
+        f"eventsnext.php?id={TEAM_ID}"
     )
 
-
+    response = requests.get(url)
     response.raise_for_status()
 
     data = response.json()
 
-    print(data)
-
-
     fixtures = []
 
+    for event in data.get("events", []):
 
-    for item in data.get("response", []):
+        if not event:
+            continue
 
-        fixture = item["fixture"]
-        teams = item["teams"]
-        league = item["league"]
+        date = event.get("dateEvent")
+        time = event.get("strTime")
 
+        if not date:
+            continue
 
-        # Convert API date to XMLTV format
-        kickoff = datetime.fromisoformat(
-            fixture["date"].replace("Z", "+00:00")
+        if not time:
+            time = "15:00:00"
+
+        kickoff = datetime.strptime(
+            f"{date} {time}",
+            "%Y-%m-%d %H:%M:%S"
         )
 
-
-        xml_time = (
-            kickoff.strftime("%Y%m%d%H%M%S")
-            + " +0000"
+        kickoff = kickoff.replace(
+            tzinfo=timezone.utc
         )
 
-
-        stadium = "Unknown"
-
-        if fixture.get("venue"):
-            stadium = fixture["venue"].get(
-                "name",
-                "Unknown"
-            )
+        if kickoff < datetime.now(timezone.utc):
+            continue
 
 
         fixtures.append({
 
-            "home": teams["home"]["name"],
+            "home": event.get(
+                "strHomeTeam",
+                "Unknown"
+            ),
 
-            "away": teams["away"]["name"],
+            "away": event.get(
+                "strAwayTeam",
+                "Unknown"
+            ),
 
-            "competition":
-                league["name"],
+            "competition": event.get(
+                "strLeague",
+                "Football"
+            ),
 
-            "stadium":
-                stadium,
+            "stadium": event.get(
+                "strVenue",
+                "Ibrox Stadium"
+            ),
 
             "kickoff":
-                xml_time,
+                kickoff.strftime(
+                    "%Y%m%d%H%M%S +0000"
+                ),
 
-            "tv":
-                ""
+            "tv": ""
 
         })
+
+
+    fixtures.sort(
+        key=lambda x: x["kickoff"]
+    )
 
 
     return fixtures
