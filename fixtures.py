@@ -23,8 +23,9 @@ def get_fixtures():
 
 
     params = {
-        "team": RANGERS_ID,
-        "next": 20
+    "team": RANGERS_ID,
+    "season": 2026,
+    "league": 179
     }
 
 
