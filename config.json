@@ -1,1 +1,7 @@
-
+{
+  "channel_id": "rangerstv",
+  "channel_name": "Rangers TV",
+  "update_hours": 6,
+  "next_game_interval_hours": 2,
+  "timezone": "Europe/London"
+}
