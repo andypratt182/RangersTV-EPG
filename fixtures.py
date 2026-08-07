@@ -20,17 +20,10 @@ def get_fixtures():
 
 
     params = {
-
-        "selectedStartDate": start_date,
-
-        "selectedEndDate": end_date,
-
-        "todayDate": start_date,
-
-        "urn":
-            "urn:bbc:sportsdata:"
-            "football:team:rangers"
-
+    "selectedStartDate": "2026-08-08",
+    "selectedEndDate": "2026-08-31",
+    "todayDate": "2026-08-07",
+    "urn": "urn:bbc:sportsdata:football:team:rangers"
     }
 
 
