@@ -1,2 +1,2 @@
-# RangersTV-EPG
-Automatic Rangers TV XMLTV EPG generator for TiviMate
+# SPFL-EPG
+Automatic SPFL XMLTV EPG generator for TiviMate
