@@ -2,6 +2,8 @@ import requests
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from teams import SPFL_TEAMS
+
 
 BBC_FIXTURES_URL = (
     "https://web-cdn.api.bbci.co.uk/"
@@ -9,6 +11,21 @@ BBC_FIXTURES_URL = (
 )
 
 UK_TZ = ZoneInfo("Europe/London")
+
+
+def get_home_stadium(home_team):
+
+    for team in SPFL_TEAMS.values():
+
+        team_name = team["name"].replace(
+            " TV",
+            ""
+        )
+
+        if team_name == home_team:
+            return team["stadium"]
+
+    return "Venue TBC"
 
 
 def get_fixtures(team):
@@ -107,6 +124,9 @@ def get_fixtures(team):
                     continue
 
 
+                home_team = event["home"]["fullName"]
+
+
                 fixtures.append(
                     {
                         "channel": team["name"],
@@ -114,7 +134,7 @@ def get_fixtures(team):
                         "channel_id": None,
 
                         "home":
-                            event["home"]["fullName"],
+                            home_team,
 
                         "away":
                             event["away"]["fullName"],
@@ -123,7 +143,9 @@ def get_fixtures(team):
                             competition,
 
                         "stadium":
-                            team["stadium"],
+                            get_home_stadium(
+                                home_team
+                            ),
 
                         "kickoff":
                             kickoff.strftime(
