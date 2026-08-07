@@ -28,7 +28,7 @@ if __name__ == "__main__":
         try:
 
             fixtures = get_fixtures(
-                team["urn"]
+                team
             )
 
             if not fixtures:
