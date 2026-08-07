@@ -45,14 +45,14 @@ SPFL_TEAMS = {
         "urn": "urn:bbc:sportsdata:football:team:motherwell",
     },
 
-    "rosscountytv": {
-        "name": "Ross County TV",
-        "urn": "urn:bbc:sportsdata:football:team:ross-county",
+    "falkirktv": {
+        "name": "Falkirk TV",
+        "urn": "urn:bbc:sportsdata:football:team:falkirk",
     },
 
-    "stjohnstonetv": {
-        "name": "St Johnstone TV",
-        "urn": "urn:bbc:sportsdata:football:team:st-johnstone",
+    "livingstontv": {
+        "name": "Livingston TV",
+        "urn": "urn:bbc:sportsdata:football:team:livingston",
     },
 
     "stmirrentv": {
