@@ -3,8 +3,8 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timezone
 
 
-RANGERS_FIXTURES_URL = (
-    "https://www.rangers.co.uk/fixtures"
+BBC_FIXTURES_URL = (
+    "https://www.bbc.co.uk/sport/football/teams/rangers/scores-fixtures"
 )
 
 
@@ -17,9 +17,8 @@ def get_fixtures():
         )
     }
 
-
     response = requests.get(
-        RANGERS_FIXTURES_URL,
+        BBC_FIXTURES_URL,
         headers=headers,
         timeout=20
     )
@@ -36,64 +35,71 @@ def get_fixtures():
     fixtures = []
 
 
-    # Look for JSON-LD structured data
-    for script in soup.find_all(
-        "script",
-        type="application/ld+json"
-    ):
-
-        try:
-            data = script.string
-
-            if not data:
-                continue
-
-            if "Rangers" not in data:
-                continue
-
-
-        except Exception:
-            continue
-
-
-    # Fallback parser for fixture cards
-    fixture_blocks = soup.select(
-        "[class*='fixture']"
+    # BBC embeds fixture data in JSON
+    scripts = soup.find_all(
+        "script"
     )
 
 
-    for block in fixture_blocks:
+    for script in scripts:
 
-        text = block.get_text(
-            " ",
-            strip=True
-        )
+        if not script.string:
+            continue
 
+        text = script.string
 
         if "Rangers" not in text:
             continue
 
 
-        # Basic extraction
-        fixtures.append({
+        # Look for ISO dates
+        import re
 
-            "home": "Rangers",
+        dates = re.findall(
+            r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}",
+            text
+        )
 
-            "away": text,
 
-            "competition":
-                "Rangers Fixture",
+        for date in dates:
 
-            "stadium":
-                "Ibrox Stadium",
+            kickoff = datetime.fromisoformat(
+                date
+            ).replace(
+                tzinfo=timezone.utc
+            )
 
-            "kickoff":
-                "",
 
-            "tv":
-                ""
+            if kickoff < datetime.now(timezone.utc):
+                continue
 
-        })
+
+            fixtures.append({
+
+                "home": "Rangers",
+
+                "away": "Opponent",
+
+                "competition":
+                    "Football",
+
+                "stadium":
+                    "Ibrox Stadium",
+
+                "kickoff":
+                    kickoff.strftime(
+                        "%Y%m%d%H%M%S +0000"
+                    ),
+
+                "tv":
+                    ""
+
+            })
+
+
+    fixtures.sort(
+        key=lambda x: x["kickoff"]
+    )
 
 
     return fixtures
