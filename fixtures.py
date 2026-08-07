@@ -3,18 +3,22 @@ import requests
 from datetime import datetime
 
 
-API_KEY = os.environ.get("API_FOOTBALL_KEY")
+API_URL = "https://v3.football.api-sports.io"
 
-BASE_URL = "https://v3.football.api-sports.io"
-
-# Rangers FC ID on API-Football
+# Rangers FC ID in API-Football
 RANGERS_ID = 257
 
 
 def get_fixtures():
 
+    api_key = os.environ.get("API_FOOTBALL_KEY")
+
+    if not api_key:
+        raise Exception("Missing API_FOOTBALL_KEY")
+
+
     headers = {
-        "x-apisports-key": API_KEY
+        "x-apisports-key": api_key
     }
 
 
@@ -25,11 +29,13 @@ def get_fixtures():
 
 
     response = requests.get(
-        f"{BASE_URL}/fixtures",
+        f"{API_URL}/fixtures",
         headers=headers,
         params=params
     )
 
+
+    response.raise_for_status()
 
     data = response.json()
 
@@ -37,43 +43,48 @@ def get_fixtures():
     fixtures = []
 
 
-    for game in data.get("response", []):
+    for item in data["response"]:
 
-        fixture = game["fixture"]
-        teams = game["teams"]
-        league = game["league"]
+        fixture = item["fixture"]
+        teams = item["teams"]
+        league = item["league"]
 
 
+        # Convert API date to XMLTV format
         kickoff = datetime.fromisoformat(
             fixture["date"].replace("Z", "+00:00")
         )
 
 
-        kickoff_xml = kickoff.strftime(
-            "%Y%m%d%H%M%S"
-        ) + " +0000"
+        xml_time = (
+            kickoff.strftime("%Y%m%d%H%M%S")
+            + " +0000"
+        )
 
 
-        home = teams["home"]["name"]
-        away = teams["away"]["name"]
+        stadium = "Unknown"
+
+        if fixture.get("venue"):
+            stadium = fixture["venue"].get(
+                "name",
+                "Unknown"
+            )
 
 
         fixtures.append({
 
-            "home": home,
+            "home": teams["home"]["name"],
 
-            "away": away,
+            "away": teams["away"]["name"],
 
             "competition":
                 league["name"],
 
             "stadium":
-                fixture["venue"]["name"]
-                if fixture["venue"]["name"]
-                else "Unknown",
+                stadium,
 
             "kickoff":
-                kickoff_xml,
+                xml_time,
 
             "tv":
                 ""
