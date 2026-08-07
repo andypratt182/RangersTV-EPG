@@ -9,6 +9,9 @@ CHANNEL_ID = "rangerstv"
 UK_TZ = ZoneInfo("Europe/London")
 
 
+MATCH_DURATION = timedelta(hours=2)
+
+
 def add_programme(
     tv,
     start,
@@ -16,6 +19,10 @@ def add_programme(
     title,
     description
 ):
+
+    # Don't create zero-length programmes.
+    if stop <= start:
+        return
 
     programme = ET.SubElement(
         tv,
@@ -77,10 +84,59 @@ def get_next_match(fixtures, after_time):
         )
 
         if kickoff > after_time:
-
             return match
 
     return None
+
+
+def create_next_game_programme(
+    tv,
+    start,
+    stop,
+    fixtures
+):
+
+    if stop <= start:
+        return
+
+
+    next_match = get_next_match(
+        fixtures,
+        start
+    )
+
+
+    if next_match is None:
+
+        title = "Next Game"
+
+        description = (
+            "No upcoming Rangers fixture"
+        )
+
+    else:
+
+        title = "Next Game"
+
+        description = (
+            f"{next_match['home']} vs "
+            f"{next_match['away']}\n"
+            f"Competition: "
+            f"{next_match['competition']}\n"
+            f"Venue: "
+            f"{next_match['stadium']}\n"
+            f"Kick-off: "
+            f"{format_kickoff(next_match['kickoff'])}"
+        )
+
+
+    add_programme(
+        tv,
+        xml_time(start),
+        xml_time(stop),
+        title,
+        description
+    )
 
 
 def create_xmltv(fixtures, filename):
@@ -93,6 +149,11 @@ def create_xmltv(fixtures, filename):
         }
     )
 
+
+    # --------------------------------------------------
+    # CHANNEL
+    # --------------------------------------------------
+
     channel = ET.SubElement(
         tv,
         "channel",
@@ -101,6 +162,7 @@ def create_xmltv(fixtures, filename):
         }
     )
 
+
     ET.SubElement(
         channel,
         "display-name"
@@ -108,99 +170,38 @@ def create_xmltv(fixtures, filename):
 
 
     # --------------------------------------------------
-    # Create hourly "Next Game" entries
+    # SORT FIXTURES
+    # --------------------------------------------------
+
+    fixtures = sorted(
+        fixtures,
+        key=lambda x: x["kickoff"]
+    )
+
+
+    # --------------------------------------------------
+    # EPG WINDOW
     # --------------------------------------------------
 
     now = datetime.now(timezone.utc)
 
-    aligned_start = now.replace(
+    epg_start = now.replace(
         minute=0,
         second=0,
         microsecond=0
     )
 
-
-    for i in range(240):
-
-        start = aligned_start + timedelta(
-            hours=i
-        )
-
-        stop = start + timedelta(
-            hours=1
-        )
-
-
-        # Check whether this hour overlaps a live match.
-        live_match = None
-
-        for match in fixtures:
-
-            kickoff = parse_kickoff(
-                match["kickoff"]
-            )
-
-            match_end = kickoff + timedelta(
-                hours=2
-            )
-
-            if (
-                start < match_end
-                and stop > kickoff
-            ):
-
-                live_match = match
-                break
-
-
-        # Don't create a Next Game programme over a live match.
-        if live_match is not None:
-            continue
-
-
-        # Find the next fixture after this hour.
-        next_match = get_next_match(
-            fixtures,
-            start
-        )
-
-
-        if next_match is None:
-
-            title = "Next Game"
-
-            description = (
-                "No upcoming Rangers fixture"
-            )
-
-        else:
-
-            title = "Next Game"
-
-            description = (
-                f"{next_match['home']} vs "
-                f"{next_match['away']}\n"
-                f"Competition: "
-                f"{next_match['competition']}\n"
-                f"Venue: "
-                f"{next_match['stadium']}\n"
-                f"Kick-off: "
-                f"{format_kickoff(next_match['kickoff'])}"
-            )
-
-
-        add_programme(
-            tv,
-            xml_time(start),
-            xml_time(stop),
-            title,
-            description
-        )
+    epg_end = epg_start + timedelta(
+        hours=240
+    )
 
 
     # --------------------------------------------------
-    # Create LIVE match entries
+    # BUILD PROGRAMME TIMELINE
     # --------------------------------------------------
+
+    current = epg_start
+
 
     for match in fixtures:
 
@@ -208,31 +209,99 @@ def create_xmltv(fixtures, filename):
             match["kickoff"]
         )
 
-        match_end = kickoff + timedelta(
-            hours=2
+        match_end = kickoff + MATCH_DURATION
+
+
+        # Ignore matches completely outside the EPG.
+        if match_end <= epg_start:
+            continue
+
+        if kickoff >= epg_end:
+            break
+
+
+        # --------------------------------------------------
+        # FILLER BEFORE MATCH
+        # --------------------------------------------------
+
+        filler_end = min(
+            kickoff,
+            epg_end
         )
 
 
-        add_programme(
-            tv,
-            xml_time(kickoff),
-            xml_time(match_end),
-            (
-                f"LIVE: "
-                f"{match['home']} vs "
-                f"{match['away']}"
-            ),
-            (
-                f"{match['competition']}\n"
-                f"Venue: {match['stadium']}\n"
-                f"Kick-off: "
-                f"{format_kickoff(match['kickoff'])}"
+        if current < filler_end:
+
+            create_next_game_programme(
+                tv,
+                current,
+                filler_end,
+                fixtures
             )
+
+
+        # --------------------------------------------------
+        # LIVE MATCH
+        # --------------------------------------------------
+
+        live_start = max(
+            kickoff,
+            epg_start
+        )
+
+        live_end = min(
+            match_end,
+            epg_end
+        )
+
+
+        if live_start < live_end:
+
+            add_programme(
+                tv,
+                xml_time(live_start),
+                xml_time(live_end),
+                (
+                    f"LIVE: "
+                    f"{match['home']} vs "
+                    f"{match['away']}"
+                ),
+                (
+                    f"{match['competition']}\n"
+                    f"Venue: "
+                    f"{match['stadium']}\n"
+                    f"Kick-off: "
+                    f"{format_kickoff(match['kickoff'])}"
+                )
+            )
+
+
+        current = max(
+            current,
+            match_end
+        )
+
+
+        if current >= epg_end:
+            break
+
+
+    # --------------------------------------------------
+    # FILLER AFTER LAST MATCH
+    # --------------------------------------------------
+
+    if current < epg_end:
+
+        create_next_game_programme(
+            tv,
+            current,
+            epg_end,
+            fixtures
         )
 
 
     # --------------------------------------------------
-    # Write XMLTV file
+    # WRITE XMLTV
     # --------------------------------------------------
 
     Path(filename).parent.mkdir(
