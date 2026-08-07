@@ -24,10 +24,8 @@ def get_fixtures():
 
     params = {
     "team": RANGERS_ID,
-    "from": "2026-01-01",
-    "to": "2026-12-31"
+    "season": 2024
     }
-
 
     response = requests.get(
         f"{API_URL}/fixtures",
