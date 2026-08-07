@@ -46,7 +46,7 @@ def get_fixtures():
     fixtures = []
 
 
-    for item in data["response"]:
+    for item in data.get("response", []):
 
         fixture = item["fixture"]
         teams = item["teams"]
