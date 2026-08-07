@@ -1,86 +1,99 @@
 import requests
+from bs4 import BeautifulSoup
 from datetime import datetime, timezone
 
 
-TEAM_ID = "133602"   # Rangers FC on TheSportsDB
+RANGERS_FIXTURES_URL = (
+    "https://www.rangers.co.uk/fixtures"
+)
 
 
 def get_fixtures():
 
-    url = (
-        f"https://www.thesportsdb.com/api/v1/json/3/"
-        f"eventsnext.php?id={TEAM_ID}"
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 "
+            "(compatible; RangersTV-EPG/1.0)"
+        )
+    }
+
+
+    response = requests.get(
+        RANGERS_FIXTURES_URL,
+        headers=headers,
+        timeout=20
     )
 
-    response = requests.get(url)
     response.raise_for_status()
 
-    data = response.json()
+
+    soup = BeautifulSoup(
+        response.text,
+        "html.parser"
+    )
+
 
     fixtures = []
 
-    for event in data.get("events", []):
 
-        if not event:
+    # Look for JSON-LD structured data
+    for script in soup.find_all(
+        "script",
+        type="application/ld+json"
+    ):
+
+        try:
+            data = script.string
+
+            if not data:
+                continue
+
+            if "Rangers" not in data:
+                continue
+
+
+        except Exception:
             continue
 
-        date = event.get("dateEvent")
-        time = event.get("strTime")
 
-        if not date:
-            continue
+    # Fallback parser for fixture cards
+    fixture_blocks = soup.select(
+        "[class*='fixture']"
+    )
 
-        if not time:
-            time = "15:00:00"
 
-        kickoff = datetime.strptime(
-            f"{date} {time}",
-            "%Y-%m-%d %H:%M:%S"
+    for block in fixture_blocks:
+
+        text = block.get_text(
+            " ",
+            strip=True
         )
 
-        kickoff = kickoff.replace(
-            tzinfo=timezone.utc
-        )
 
-        if kickoff < datetime.now(timezone.utc):
+        if "Rangers" not in text:
             continue
 
 
+        # Basic extraction
         fixtures.append({
 
-            "home": event.get(
-                "strHomeTeam",
-                "Unknown"
-            ),
+            "home": "Rangers",
 
-            "away": event.get(
-                "strAwayTeam",
-                "Unknown"
-            ),
+            "away": text,
 
-            "competition": event.get(
-                "strLeague",
-                "Football"
-            ),
+            "competition":
+                "Rangers Fixture",
 
-            "stadium": event.get(
-                "strVenue",
-                "Ibrox Stadium"
-            ),
+            "stadium":
+                "Ibrox Stadium",
 
             "kickoff":
-                kickoff.strftime(
-                    "%Y%m%d%H%M%S +0000"
-                ),
+                "",
 
-            "tv": ""
+            "tv":
+                ""
 
         })
-
-
-    fixtures.sort(
-        key=lambda x: x["kickoff"]
-    )
 
 
     return fixtures
