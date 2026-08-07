@@ -13,16 +13,16 @@ UK_TZ = ZoneInfo("Europe/London")
 
 def get_fixtures(team_urn):
     """
-    Get upcoming fixtures for a BBC Sports team.
-
-    team_urn example:
-    urn:bbc:sportsdata:football:team:rangers
+    Get upcoming fixtures for one SPFL team
+    from the BBC Sport JSON feed.
     """
 
-    # Use UK date rather than UTC date.
+    # Use UK date because this is what the BBC
+    # page uses for its fixture window.
     today = datetime.now(UK_TZ).date()
 
-    # The BBC endpoint has been tested with a 24-day window.
+    # The BBC endpoint has been tested with
+    # this 24-day window.
     start_date = today + timedelta(days=1)
     end_date = today + timedelta(days=24)
 
@@ -34,7 +34,7 @@ def get_fixtures(team_urn):
     }
 
     headers = {
-        "User-Agent": "RangersTV-EPG/1.0",
+        "User-Agent": "SPFL-EPG/1.0",
         "Accept": "application/json",
     }
 
@@ -46,10 +46,25 @@ def get_fixtures(team_urn):
     )
 
     if not response.ok:
-        print("BBC request failed")
-        print("Status:", response.status_code)
-        print("URL:", response.url)
-        print("Response:", response.text[:1000])
+
+        print(
+            f"BBC request failed for {team_urn}"
+        )
+
+        print(
+            "Status:",
+            response.status_code
+        )
+
+        print(
+            "URL:",
+            response.url
+        )
+
+        print(
+            "Response:",
+            response.text[:1000]
+        )
 
         response.raise_for_status()
 
@@ -58,7 +73,10 @@ def get_fixtures(team_urn):
     fixtures = []
 
     # Walk through the BBC JSON structure.
-    for event_group in data.get("eventGroups", []):
+    for event_group in data.get(
+        "eventGroups",
+        []
+    ):
 
         for secondary_group in event_group.get(
             "secondaryGroups",
@@ -75,7 +93,7 @@ def get_fixtures(team_urn):
                 []
             ):
 
-                # BBC supplies kickoff in UTC.
+                # BBC supplies the kickoff in UTC.
                 kickoff = datetime.fromisoformat(
                     event["startDateTime"].replace(
                         "Z",
@@ -83,25 +101,18 @@ def get_fixtures(team_urn):
                     )
                 )
 
-                # Ignore fixtures that have already started.
+                # Ignore matches that have already started.
                 if kickoff < datetime.now(timezone.utc):
                     continue
 
                 home = event["home"]["fullName"]
                 away = event["away"]["fullName"]
 
-                # Determine the venue.
-                if home == "Rangers":
-                    stadium = "Ibrox Stadium"
-                else:
-                    stadium = "Away"
-
                 fixtures.append(
                     {
                         "home": home,
                         "away": away,
                         "competition": competition,
-                        "stadium": stadium,
                         "kickoff": kickoff.strftime(
                             "%Y%m%d%H%M%S +0000"
                         ),
