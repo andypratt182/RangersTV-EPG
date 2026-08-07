@@ -65,7 +65,7 @@ def create_xmltv(fixtures, filename):
 
 
             # Create rolling Next Game entries aligned to the hour
-    now = datetime.now()
+    now = datetime.utcnow()
 
     aligned_start = now.replace(
         minute=0,
