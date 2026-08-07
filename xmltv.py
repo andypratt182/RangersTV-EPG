@@ -3,24 +3,23 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import xml.etree.ElementTree as ET
 
+from teams import SPFL_TEAMS
 
-CHANNEL_ID = "rangerstv"
 
 UK_TZ = ZoneInfo("Europe/London")
-
 
 MATCH_DURATION = timedelta(hours=2)
 
 
 def add_programme(
     tv,
+    channel_id,
     start,
     stop,
     title,
     description
 ):
 
-    # Don't create zero-length programmes.
     if stop <= start:
         return
 
@@ -30,7 +29,7 @@ def add_programme(
         {
             "start": start,
             "stop": stop,
-            "channel": CHANNEL_ID,
+            "channel": channel_id,
         },
     )
 
@@ -59,11 +58,9 @@ def format_kickoff(timestamp):
 
     utc_time = parse_kickoff(timestamp)
 
-    local_time = utc_time.astimezone(
+    return utc_time.astimezone(
         UK_TZ
-    )
-
-    return local_time.strftime(
+    ).strftime(
         "%A %d %B %Y at %H:%M"
     )
 
@@ -75,9 +72,12 @@ def xml_time(dt):
     ) + " +0000"
 
 
-def get_next_match(fixtures, after_time):
+def get_next_match(fixtures, channel_id, after_time):
 
     for match in fixtures:
+
+        if match.get("channel_id") != channel_id:
+            continue
 
         kickoff = parse_kickoff(
             match["kickoff"]
@@ -91,32 +91,20 @@ def get_next_match(fixtures, after_time):
 
 def create_next_game_programme(
     tv,
+    channel_id,
     start,
     stop,
     fixtures
 ):
 
-    if stop <= start:
-        return
-
-
     next_match = get_next_match(
         fixtures,
+        channel_id,
         start
     )
 
 
-    if next_match is None:
-
-        title = "Next Game"
-
-        description = (
-            "No upcoming Rangers fixture"
-        )
-
-    else:
-
-        title = "Next Game"
+    if next_match:
 
         description = (
             f"{next_match['home']} vs "
@@ -124,19 +112,44 @@ def create_next_game_programme(
             f"Competition: "
             f"{next_match['competition']}\n"
             f"Venue: "
-f"{next_match.get('stadium', 'Venue TBC')}\n"
+            f"{next_match.get('stadium','Venue TBC')}\n"
             f"Kick-off: "
             f"{format_kickoff(next_match['kickoff'])}"
+        )
+
+    else:
+
+        description = (
+            "No upcoming fixture"
         )
 
 
     add_programme(
         tv,
+        channel_id,
         xml_time(start),
         xml_time(stop),
-        title,
+        "Next Game",
         description
     )
+
+
+def create_channel_entries(tv):
+
+    for channel_id, team in SPFL_TEAMS.items():
+
+        channel = ET.SubElement(
+            tv,
+            "channel",
+            {
+                "id": channel_id
+            }
+        )
+
+        ET.SubElement(
+            channel,
+            "display-name"
+        ).text = team["name"]
 
 
 def create_xmltv(fixtures, filename):
@@ -145,33 +158,13 @@ def create_xmltv(fixtures, filename):
         "tv",
         {
             "generator-info-name":
-                "Rangers TV EPG"
+                "SPFL IPTV EPG"
         }
     )
 
 
-    # --------------------------------------------------
-    # CHANNEL
-    # --------------------------------------------------
+    create_channel_entries(tv)
 
-    channel = ET.SubElement(
-        tv,
-        "channel",
-        {
-            "id": CHANNEL_ID
-        }
-    )
-
-
-    ET.SubElement(
-        channel,
-        "display-name"
-    ).text = "Rangers TV"
-
-
-    # --------------------------------------------------
-    # SORT FIXTURES
-    # --------------------------------------------------
 
     fixtures = sorted(
         fixtures,
@@ -179,11 +172,9 @@ def create_xmltv(fixtures, filename):
     )
 
 
-    # --------------------------------------------------
-    # EPG WINDOW
-    # --------------------------------------------------
-
-    now = datetime.now(timezone.utc)
+    now = datetime.now(
+        timezone.utc
+    )
 
     epg_start = now.replace(
         minute=0,
@@ -196,69 +187,61 @@ def create_xmltv(fixtures, filename):
     )
 
 
-    # --------------------------------------------------
-    # BUILD PROGRAMME TIMELINE
-    # --------------------------------------------------
+    # Create timeline separately for each club
 
-    current = epg_start
+    for channel_id in SPFL_TEAMS:
 
-
-    for match in fixtures:
-
-        kickoff = parse_kickoff(
-            match["kickoff"]
-        )
-
-        match_end = kickoff + MATCH_DURATION
+        channel_matches = [
+            f for f in fixtures
+            if f.get("channel_id") == channel_id
+        ]
 
 
-        # Ignore matches completely outside the EPG.
-        if match_end <= epg_start:
-            continue
-
-        if kickoff >= epg_end:
-            break
+        current = epg_start
 
 
-        # --------------------------------------------------
-        # FILLER BEFORE MATCH
-        # --------------------------------------------------
+        for match in channel_matches:
 
-        filler_end = min(
-            kickoff,
-            epg_end
-        )
+            kickoff = parse_kickoff(
+                match["kickoff"]
+            )
+
+            match_end = kickoff + MATCH_DURATION
 
 
-        if current < filler_end:
+            if match_end <= epg_start:
+                continue
 
-            create_next_game_programme(
-                tv,
-                current,
-                filler_end,
-                fixtures
+
+            if kickoff >= epg_end:
+                break
+
+
+            if current < kickoff:
+
+                create_next_game_programme(
+                    tv,
+                    channel_id,
+                    current,
+                    kickoff,
+                    fixtures
+                )
+
+
+            live_start = max(
+                kickoff,
+                epg_start
+            )
+
+            live_end = min(
+                match_end,
+                epg_end
             )
 
 
-        # --------------------------------------------------
-        # LIVE MATCH
-        # --------------------------------------------------
-
-        live_start = max(
-            kickoff,
-            epg_start
-        )
-
-        live_end = min(
-            match_end,
-            epg_end
-        )
-
-
-        if live_start < live_end:
-
             add_programme(
                 tv,
+                channel_id,
                 xml_time(live_start),
                 xml_time(live_end),
                 (
@@ -269,40 +252,29 @@ def create_xmltv(fixtures, filename):
                 (
                     f"{match['competition']}\n"
                     f"Venue: "
-f"{match.get('stadium', 'Venue TBC')}\n"
+                    f"{match.get('stadium','Venue TBC')}\n"
                     f"Kick-off: "
                     f"{format_kickoff(match['kickoff'])}"
                 )
             )
 
 
-        current = max(
-            current,
-            match_end
-        )
+            current = max(
+                current,
+                match_end
+            )
 
 
-        if current >= epg_end:
-            break
+        if current < epg_end:
 
+            create_next_game_programme(
+                tv,
+                channel_id,
+                current,
+                epg_end,
+                fixtures
+            )
 
-    # --------------------------------------------------
-    # FILLER AFTER LAST MATCH
-    # --------------------------------------------------
-
-    if current < epg_end:
-
-        create_next_game_programme(
-            tv,
-            current,
-            epg_end,
-            fixtures
-        )
-
-
-    # --------------------------------------------------
-    # WRITE XMLTV
-    # --------------------------------------------------
 
     Path(filename).parent.mkdir(
         parents=True,
