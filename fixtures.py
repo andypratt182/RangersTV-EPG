@@ -78,7 +78,7 @@ def get_fixtures():
 
                 "home": "Rangers",
 
-                "away": "Opponent",
+                "away": extract_opponent(text),
 
                 "competition":
                     "Football",
