@@ -2,9 +2,9 @@ from pathlib import Path
 
 from fixtures import get_fixtures
 from teams import SPFL_TEAMS
+from xmltv import create_xmltv
 
 
-# Ensure GitHub Pages always has something to upload
 output_folder = Path("output")
 output_folder.mkdir(
     exist_ok=True
@@ -13,7 +13,8 @@ output_folder.mkdir(
 
 if __name__ == "__main__":
 
-    report_lines = []
+    all_fixtures = []
+
 
     for channel_id, team in SPFL_TEAMS.items():
 
@@ -21,9 +22,6 @@ if __name__ == "__main__":
         print(team["name"])
         print("====================")
 
-        report_lines.append(
-            f"\n{team['name']}\n"
-        )
 
         try:
 
@@ -31,14 +29,11 @@ if __name__ == "__main__":
                 team
             )
 
+
             if not fixtures:
 
                 print(
                     "No upcoming fixtures"
-                )
-
-                report_lines.append(
-                    "No upcoming fixtures\n"
                 )
 
                 continue
@@ -46,40 +41,45 @@ if __name__ == "__main__":
 
             for match in fixtures:
 
-                line = (
+                # Add the IPTV channel ID
+                # so XMLTV knows where to place it
+                match["channel_id"] = channel_id
+
+
+                print(
                     f"{match['kickoff']} - "
                     f"{match['home']} vs "
                     f"{match['away']} - "
                     f"{match['competition']}"
                 )
 
-                print(line)
 
-                report_lines.append(
-                    line + "\n"
+                all_fixtures.append(
+                    match
                 )
 
 
         except Exception as e:
 
-            error = (
+            print(
                 f"ERROR loading "
                 f"{team['name']}: {e}"
             )
 
-            print(error)
 
-            report_lines.append(
-                error + "\n"
-            )
+    print("\n====================")
+    print(
+        f"Total fixtures found: {len(all_fixtures)}"
+    )
+    print("====================")
 
 
-    # Create a temporary file so the
-    # GitHub Pages upload step succeeds.
-    (output_folder / "test.txt").write_text(
-        "".join(report_lines),
-        encoding="utf-8"
+    create_xmltv(
+        all_fixtures,
+        "output/spfl.xml"
     )
 
 
-    print("\nSPFL fixture test completed")
+    print(
+        "SPFL EPG generated successfully"
+    )
