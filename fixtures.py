@@ -7,6 +7,34 @@ BBC_FIXTURES_URL = (
     "https://www.bbc.co.uk/sport/football/teams/rangers/scores-fixtures"
 )
 
+def extract_opponent(text):
+
+    teams = [
+        "Aberdeen",
+        "Celtic",
+        "Dundee",
+        "Dundee United",
+        "Hearts",
+        "Hibernian",
+        "Kilmarnock",
+        "Motherwell",
+        "Rangers",
+        "Ross County",
+        "St Johnstone",
+        "St Mirren",
+    ]
+
+    found = []
+
+    for team in teams:
+        if team in text:
+            found.append(team)
+
+    for team in found:
+        if team != "Rangers":
+            return team
+
+    return "Unknown"
 
 def get_fixtures():
 
