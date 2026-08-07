@@ -39,6 +39,8 @@ def get_fixtures():
 
     data = response.json()
 
+    print(data)
+
 
     fixtures = []
 
