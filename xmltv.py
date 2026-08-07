@@ -124,7 +124,7 @@ def create_next_game_programme(
             f"Competition: "
             f"{next_match['competition']}\n"
             f"Venue: "
-            f"{next_match['stadium']}\n"
+f"{next_match.get('stadium', 'Venue TBC')}\n"
             f"Kick-off: "
             f"{format_kickoff(next_match['kickoff'])}"
         )
@@ -269,7 +269,7 @@ def create_xmltv(fixtures, filename):
                 (
                     f"{match['competition']}\n"
                     f"Venue: "
-                    f"{match['stadium']}\n"
+f"{match.get('stadium', 'Venue TBC')}\n"
                     f"Kick-off: "
                     f"{format_kickoff(match['kickoff'])}"
                 )
