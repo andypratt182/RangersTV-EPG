@@ -60,10 +60,10 @@ SPFL_TEAMS = {
         "stadium": "Falkirk Stadium",
     },
 
-    "livingstontv": {
-        "name": "Livingston TV",
-        "urn": "urn:bbc:sportsdata:football:team:livingston",
-        "stadium": "Almondvale Stadium",
+    "stjohnstonetv": {
+        "name": "St Johnstone TV",
+        "urn": "urn:bbc:sportsdata:football:team:st-johnstone",
+        "stadium": "McDiarmid Park",
     },
 
     "stmirrentv": {
