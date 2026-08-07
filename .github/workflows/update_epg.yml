@@ -1,1 +1,45 @@
+name: Update Rangers TV EPG
 
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+
+  workflow_dispatch:
+
+jobs:
+  generate:
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Generate XMLTV
+        env:
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+        run: |
+          python generator.py
+
+      - name: Upload EPG
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: output
+
+      - name: Deploy Pages
+        uses: actions/deploy-pages@v4
