@@ -1,5 +1,6 @@
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import xml.etree.ElementTree as ET
 
 
@@ -18,15 +19,42 @@ def add_programme(tv, start, stop, title, description):
         }
     )
 
-    ET.SubElement(
-        programme,
-        "title"
-    ).text = title
+    ET.SubElement(programme, "title").text = title
+    ET.SubElement(programme, "desc").text = description
 
-    ET.SubElement(
-        programme,
-        "desc"
-    ).text = description
+
+
+def parse_kickoff(timestamp):
+
+    local_time = datetime.strptime(
+        timestamp.replace(" +0000", ""),
+        "%Y%m%d%H%M%S"
+    )
+
+    local_time = local_time.replace(
+        tzinfo=ZoneInfo("Europe/London")
+    )
+
+    return local_time.astimezone(
+        timezone.utc
+    )
+
+
+
+def format_kickoff(timestamp):
+
+    local_time = datetime.strptime(
+        timestamp.replace(" +0000", ""),
+        "%Y%m%d%H%M%S"
+    )
+
+    local_time = local_time.replace(
+        tzinfo=ZoneInfo("Europe/London")
+    )
+
+    return local_time.strftime(
+        "%A %d %B %Y at %H:%M"
+    )
 
 
 
@@ -40,7 +68,6 @@ def create_xmltv(fixtures, filename):
     )
 
 
-    # Channel information
     channel = ET.SubElement(
         tv,
         "channel",
@@ -56,20 +83,15 @@ def create_xmltv(fixtures, filename):
 
 
 
-    # Find next Rangers fixture
     if fixtures:
 
         next_match = fixtures[0]
 
         next_game = (
-            f"{next_match['home']} vs "
-            f"{next_match['away']}\n"
-            f"Competition: "
-            f"{next_match['competition']}\n"
-            f"Venue: "
-            f"{next_match['stadium']}\n"
-            f"Kick-off: "
-            f"{next_match['kickoff']}"
+            f"{next_match['home']} vs {next_match['away']}\n"
+            f"Competition: {next_match['competition']}\n"
+            f"Venue: {next_match['stadium']}\n"
+            f"Kick-off: {format_kickoff(next_match['kickoff'])}"
         )
 
     else:
@@ -78,7 +100,7 @@ def create_xmltv(fixtures, filename):
 
 
 
-    # Generate Next Game schedule
+    # Create hourly Next Game entries
     now = datetime.now(timezone.utc)
 
     aligned_start = now.replace(
@@ -96,16 +118,11 @@ def create_xmltv(fixtures, filename):
         overlap = False
 
 
-        # Avoid Next Game during live matches
         for match in fixtures:
 
-            kickoff = datetime.strptime(
-                match["kickoff"].replace(" +0000", ""),
-                "%Y%m%d%H%M%S"
-            ).replace(
-                tzinfo=timezone.utc
+            kickoff = parse_kickoff(
+                match["kickoff"]
             )
-
 
             match_end = kickoff + timedelta(hours=2)
 
@@ -119,58 +136,38 @@ def create_xmltv(fixtures, filename):
 
             add_programme(
                 tv,
-                start.strftime(
-                    "%Y%m%d%H%M%S"
-                ) + " +0000",
-
-                stop.strftime(
-                    "%Y%m%d%H%M%S"
-                ) + " +0000",
-
+                start.strftime("%Y%m%d%H%M%S") + " +0000",
+                stop.strftime("%Y%m%d%H%M%S") + " +0000",
                 "Next Game",
-
                 next_game
             )
 
 
 
-    # Generate LIVE match entries
+    # Create LIVE match entries
     for match in fixtures:
 
-        kickoff = datetime.strptime(
-            match["kickoff"].replace(" +0000", ""),
-            "%Y%m%d%H%M%S"
-        ).replace(
-            tzinfo=timezone.utc
+        kickoff = parse_kickoff(
+            match["kickoff"]
         )
-
 
         match_end = kickoff + timedelta(hours=2)
 
 
         add_programme(
             tv,
-
-            kickoff.strftime(
-                "%Y%m%d%H%M%S"
-            ) + " +0000",
-
-            match_end.strftime(
-                "%Y%m%d%H%M%S"
-            ) + " +0000",
-
+            kickoff.strftime("%Y%m%d%H%M%S") + " +0000",
+            match_end.strftime("%Y%m%d%H%M%S") + " +0000",
             f"LIVE: {match['home']} vs {match['away']}",
-
             (
                 f"{match['competition']}\n"
                 f"Venue: {match['stadium']}\n"
-                f"Kick-off: {match['kickoff']}"
+                f"Kick-off: {format_kickoff(match['kickoff'])}"
             )
         )
 
 
 
-    # Save XML
     Path(filename).parent.mkdir(
         exist_ok=True
     )
