@@ -36,7 +36,7 @@ jobs:
 
       - name: Generate XMLTV
         env:
-          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+          SPORTMONKS_API_TOKEN: ${{ secrets.SPORTMONKS_API_TOKEN }}
         run: |
           python generator.py
 
