@@ -1,345 +1,359 @@
+import os
 import requests
-
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from bs4 import BeautifulSoup
 
-
-BBC_TEAM_URL = (
-    "https://www.bbc.co.uk/sport/football/teams/"
-    "{slug}/scores-fixtures/{month}"
+SPORTMONKS_URL = (
+    "https://api.sportmonks.com/v3/football"
 )
 
 UK_TZ = ZoneInfo("Europe/London")
 
+# How far ahead to retrieve fixtures
+FIXTURE_DAYS = 24
 
-def get_month_url(team, date):
 
+def get_fixtures(team):
     """
-    Build the BBC monthly fixture-page URL.
+    Get upcoming Scottish Premiership fixtures for one SPFL team
+    using the Sportmonks API.
 
-    Example:
-    https://www.bbc.co.uk/sport/football/teams/rangers/scores-fixtures/2026-08
+    The returned fixture structure is kept compatible with the
+    existing generator.py and xmltv.py files.
     """
 
-    urn = team["urn"]
+    api_token = os.getenv(
+        "SPORTMONKS_API_TOKEN"
+    )
 
-    slug = urn.split(":")[-1]
+    if not api_token:
 
-    return BBC_TEAM_URL.format(
-        slug=slug,
-        month=date.strftime("%Y-%m")
+        raise RuntimeError(
+            "SPORTMONKS_API_TOKEN environment variable is not set"
+        )
+
+
+    today = datetime.now(
+        UK_TZ
+    ).date()
+
+    start_date = today + timedelta(
+        days=1
+    )
+
+    end_date = today + timedelta(
+        days=FIXTURE_DAYS
     )
 
 
-def parse_fixture_date(date_text, year, month):
+    # ---------------------------------------------------------
+    # Find the Sportmonks team ID
+    # ---------------------------------------------------------
 
-    """
-    Convert BBC date text into a date.
+    team_name = team["name"]
 
-    This function accepts common BBC formats such as:
-
-        Saturday 8 August
-        Sunday 9th August
-        Monday 10 August
-
-    """
-
-    cleaned = (
-        date_text
-        .replace("st", "")
-        .replace("nd", "")
-        .replace("rd", "")
-        .replace("th", "")
+    search_url = (
+        f"{SPORTMONKS_URL}/teams/search/"
+        f"{team_name}"
     )
 
-    cleaned = " ".join(
-        cleaned.split()
+
+    headers = {
+        "Accept": "application/json",
+    }
+
+
+    params = {
+        "api_token": api_token,
+    }
+
+
+    response = requests.get(
+        search_url,
+        headers=headers,
+        params=params,
+        timeout=20,
     )
 
-    formats = [
-        "%A %d %B",
-        "%A %d %B %Y",
-        "%d %B",
-        "%d %B %Y",
-    ]
 
-    for fmt in formats:
+    if not response.ok:
 
-        try:
+        print(
+            f"Sportmonks team lookup failed "
+            f"for {team_name}"
+        )
 
-            parsed = datetime.strptime(
-                cleaned,
-                fmt
-            )
+        print(
+            "Status:",
+            response.status_code
+        )
 
-            return parsed.replace(
-                year=year
-            ).date()
+        print(
+            "Response:",
+            response.text[:1000]
+        )
 
-        except ValueError:
-            continue
-
-    return None
+        response.raise_for_status()
 
 
-def parse_time(time_text):
-
-    """
-    Convert a BBC time such as:
-
-        15:00
-        19:45
-
-    into a time object.
-    """
-
-    try:
-
-        return datetime.strptime(
-            time_text.strip(),
-            "%H:%M"
-        ).time()
-
-    except ValueError:
-
-        return None
-
-
-def clean_team_name(name):
-
-    """
-    Clean BBC team names while keeping the
-    actual team name intact.
-    """
-
-    if not name:
-        return ""
-
-    return " ".join(
-        name.split()
-    ).strip()
-
-
-def extract_fixtures_from_page(
-    html,
-    team,
-    target_start,
-    target_end
-):
-
-    """
-    Extract fixtures from one BBC monthly
-    team fixture page.
-    """
-
-    soup = BeautifulSoup(
-        html,
-        "html.parser"
+    team_data = response.json().get(
+        "data",
+        []
     )
+
+
+    if not team_data:
+
+        raise RuntimeError(
+            f"Sportmonks could not find team: "
+            f"{team_name}"
+        )
+
+
+    # Try to find an exact name match first
+    sportmonks_team = None
+
+    for candidate in team_data:
+
+        candidate_name = candidate.get(
+            "name",
+            ""
+        )
+
+        if candidate_name.lower() == team_name.replace(
+            " TV",
+            ""
+        ).lower():
+
+            sportmonks_team = candidate
+            break
+
+
+    # If exact matching fails, use the first result
+    if sportmonks_team is None:
+
+        sportmonks_team = team_data[0]
+
+
+    team_id = sportmonks_team["id"]
+
+
+    print(
+        f"Sportmonks team: "
+        f"{sportmonks_team.get('name')} "
+        f"(ID {team_id})"
+    )
+
+
+    # ---------------------------------------------------------
+    # Request fixtures for this team and date range
+    # ---------------------------------------------------------
+
+    fixtures_url = (
+        f"{SPORTMONKS_URL}/fixtures/"
+        f"between/{start_date}/"
+        f"{end_date}/{team_id}"
+    )
+
+
+    params = {
+        "api_token": api_token,
+
+        # Only request information we actually need
+        "include": (
+            "participants;"
+            "league"
+        ),
+    }
+
+
+    print(
+        f"Requesting Sportmonks fixtures: "
+        f"{start_date} → {end_date}"
+    )
+
+
+    response = requests.get(
+        fixtures_url,
+        headers=headers,
+        params=params,
+        timeout=20,
+    )
+
+
+    if not response.ok:
+
+        print(
+            f"Sportmonks fixture request failed "
+            f"for {team_name}"
+        )
+
+        print(
+            "Status:",
+            response.status_code
+        )
+
+        print(
+            "URL:",
+            response.url
+        )
+
+        print(
+            "Response:",
+            response.text[:2000]
+        )
+
+        response.raise_for_status()
+
+
+    data = response.json().get(
+        "data",
+        []
+    )
+
 
     fixtures = []
 
-    current_date = None
-    current_competition = "Football"
 
     # ---------------------------------------------------------
-    # BBC pages are rendered with headings followed by
-    # fixture information. We walk through the page text
-    # and identify dates, competitions and match blocks.
+    # Process fixtures
     # ---------------------------------------------------------
 
-    elements = soup.find_all(
-        [
-            "h2",
-            "h3",
-            "h4",
-            "time",
-            "article",
-            "li",
-        ]
-    )
+    for event in data:
 
-    for element in elements:
-
-        text = " ".join(
-            element.stripped_strings
+        # Ignore anything that isn't a scheduled fixture
+        starting_at = event.get(
+            "starting_at"
         )
 
-        if not text:
+        if not starting_at:
             continue
 
 
-        # -----------------------------------------------------
-        # Competition headings
-        # -----------------------------------------------------
+        try:
 
-        if (
-            "Scottish Premiership" in text
-            or "Scottish Cup" in text
-            or "League Cup" in text
-            or "Champions League" in text
-            or "Europa League" in text
-            or "Conference League" in text
-        ):
-
-            current_competition = text.strip()
-
-
-        # -----------------------------------------------------
-        # Date headings
-        # -----------------------------------------------------
-
-        possible_date = parse_fixture_date(
-            text,
-            target_start.year,
-            target_start.month
-        )
-
-        if possible_date:
-
-            current_date = possible_date
-
-
-        # -----------------------------------------------------
-        # Look for fixture information
-        # -----------------------------------------------------
-
-        if not current_date:
-            continue
-
-        if current_date < target_start:
-            continue
-
-        if current_date > target_end:
-            continue
-
-
-        # Look for a time in the element
-        time_element = element.find(
-            "time"
-        )
-
-        if time_element:
-
-            time_text = (
-                time_element.get_text(
-                    strip=True
+            kickoff = datetime.fromisoformat(
+                starting_at.replace(
+                    "Z",
+                    "+00:00"
                 )
             )
 
-        else:
+        except ValueError:
 
-            time_text = ""
-
-
-        kickoff_time = None
-
-
-        # Try to find HH:MM in the text
-
-        import re
-
-        time_match = re.search(
-            r"\b([01]?\d|2[0-3]):[0-5]\d\b",
-            text
-        )
-
-        if time_match:
-
-            kickoff_time = parse_time(
-                time_match.group(0)
+            print(
+                f"Unable to parse kickoff for "
+                f"{team_name}: {starting_at}"
             )
 
-
-        if not kickoff_time:
             continue
 
 
-        # -----------------------------------------------------
-        # Identify teams
-        # -----------------------------------------------------
-
-        # BBC commonly exposes team names through
-        # links containing /sport/football/teams/
-        team_links = element.find_all(
-            "a"
-        )
-
-        names = []
-
-        for link in team_links:
-
-            link_text = clean_team_name(
-                link.get_text(
-                    " ",
-                    strip=True
-                )
-            )
-
-            if not link_text:
-                continue
-
-            if (
-                link_text.lower()
-                in {
-                    "scores & fixtures",
-                    "table",
-                    "results",
-                }
-            ):
-                continue
-
-            names.append(
-                link_text
-            )
-
-
-        # Remove duplicates while preserving order
-
-        unique_names = []
-
-        for name in names:
-
-            if name not in unique_names:
-
-                unique_names.append(
-                    name
-                )
-
-
-        if len(unique_names) < 2:
-            continue
-
-
-        home = unique_names[0]
-        away = unique_names[1]
-
-
-        # -----------------------------------------------------
-        # Create UTC kickoff datetime
-        # -----------------------------------------------------
-
-        kickoff_local = datetime.combine(
-            current_date,
-            kickoff_time
-        ).replace(
-            tzinfo=UK_TZ
-        )
-
-        kickoff_utc = kickoff_local.astimezone(
-            timezone.utc
-        )
-
-
-        # Ignore fixtures already played
-
-        if kickoff_utc <= datetime.now(
+        # Only future fixtures
+        if kickoff <= datetime.now(
             timezone.utc
         ):
             continue
 
+
+        # -----------------------------------------------------
+        # Identify home and away teams
+        # -----------------------------------------------------
+
+        participants = event.get(
+            "participants",
+            []
+        )
+
+
+        home_team = None
+        away_team = None
+
+
+        for participant in participants:
+
+            meta = participant.get(
+                "meta",
+                {}
+            )
+
+            location = meta.get(
+                "location"
+            )
+
+
+            if location == "home":
+
+                home_team = participant.get(
+                    "name",
+                    ""
+                )
+
+
+            elif location == "away":
+
+                away_team = participant.get(
+                    "name",
+                    ""
+                )
+
+
+        # Fallback if the meta information isn't available
+        if not home_team or not away_team:
+
+            names = [
+                p.get("name", "")
+                for p in participants
+            ]
+
+            if len(names) >= 2:
+
+                home_team = names[0]
+                away_team = names[1]
+
+
+        if not home_team or not away_team:
+
+            print(
+                f"Unable to identify teams for "
+                f"fixture involving {team_name}"
+            )
+
+            continue
+
+
+        # -----------------------------------------------------
+        # Competition
+        # -----------------------------------------------------
+
+        league = event.get(
+            "league",
+            {}
+        )
+
+        competition = league.get(
+            "name",
+            "Scottish Premiership"
+        )
+
+
+        # -----------------------------------------------------
+        # Keep your own stadium mapping
+        #
+        # This deliberately uses teams.py rather than the API.
+        # -----------------------------------------------------
+
+        stadium = team.get(
+            "stadium",
+            "Venue TBC"
+        )
+
+
+        # -----------------------------------------------------
+        # Build the same structure used by your existing
+        # generator.py
+        # -----------------------------------------------------
 
         fixtures.append(
             {
@@ -347,168 +361,21 @@ def extract_fixtures_from_page(
 
                 "channel_id": None,
 
-                "home": home,
+                "home": home_team,
 
-                "away": away,
+                "away": away_team,
 
-                "competition":
-                    current_competition,
+                "competition": competition,
 
-                "stadium":
-                    team["stadium"],
+                "stadium": stadium,
 
-                "kickoff":
-                    kickoff_utc.strftime(
-                        "%Y%m%d%H%M%S +0000"
-                    ),
+                "kickoff": kickoff.strftime(
+                    "%Y%m%d%H%M%S +0000"
+                ),
 
                 "tv": "",
             }
         )
-
-
-    return fixtures
-
-
-def get_fixtures(team):
-
-    """
-    Get upcoming fixtures for one SPFL team
-    from the BBC Sport team fixture pages.
-
-    Returns the same dictionary structure as
-    the previous JSON implementation.
-    """
-
-    today = datetime.now(
-        UK_TZ
-    ).date()
-
-
-    start_date = (
-        today +
-        timedelta(days=1)
-    )
-
-
-    end_date = (
-        today +
-        timedelta(days=24)
-    )
-
-
-    headers = {
-        "User-Agent":
-            "SPFL-EPG/1.0 "
-            "(https://github.com/andypratt182/SPFL-EPG)",
-
-        "Accept":
-            "text/html,application/xhtml+xml",
-    }
-
-
-    fixtures = []
-
-
-    # ---------------------------------------------------------
-    # We may cross into the next month, so request both
-    # monthly pages when necessary.
-    # ---------------------------------------------------------
-
-    months = {
-        start_date.replace(day=1),
-        end_date.replace(day=1),
-    }
-
-
-    for month_start in sorted(months):
-
-        url = get_month_url(
-            team,
-            month_start
-        )
-
-
-        print(
-            f"Requesting BBC fixture page: "
-            f"{url}"
-        )
-
-
-        try:
-
-            response = requests.get(
-                url,
-                headers=headers,
-                timeout=20
-            )
-
-
-        except requests.RequestException as e:
-
-            print(
-                f"BBC request failed for "
-                f"{team['name']}: {e}"
-            )
-
-            continue
-
-
-        if not response.ok:
-
-            print(
-                f"BBC fixture page failed for "
-                f"{team['name']}"
-            )
-
-            print(
-                "Status:",
-                response.status_code
-            )
-
-            print(
-                "URL:",
-                response.url
-            )
-
-            continue
-
-
-        month_fixtures = (
-            extract_fixtures_from_page(
-                response.text,
-                team,
-                start_date,
-                end_date
-            )
-        )
-
-
-        fixtures.extend(
-            month_fixtures
-        )
-
-
-    # ---------------------------------------------------------
-    # Remove duplicate fixtures
-    # ---------------------------------------------------------
-
-    unique = {}
-
-    for fixture in fixtures:
-
-        key = (
-            fixture["kickoff"],
-            fixture["home"],
-            fixture["away"]
-        )
-
-        unique[key] = fixture
-
-
-    fixtures = list(
-        unique.values()
-    )
 
 
     # ---------------------------------------------------------
