@@ -114,7 +114,6 @@ def create_next_game_programme(
         start
     )
 
-
     if next_match:
 
         description = (
@@ -141,7 +140,6 @@ def create_next_game_programme(
         )
 
         title = "Next Game"
-
 
     add_programme(
         tv,
@@ -170,7 +168,6 @@ def create_channel_entries(tv):
             "display-name"
         ).text = team["name"]
 
-
         # -------------------------------------------------
         # Automatic channel logo
         # -------------------------------------------------
@@ -179,7 +176,6 @@ def create_channel_entries(tv):
             LOGO_FOLDER /
             f"{channel_id}.png"
         )
-
 
         if logo_file.exists():
 
@@ -221,20 +217,16 @@ def create_xmltv(
         }
     )
 
-
     create_channel_entries(tv)
-
 
     fixtures = sorted(
         fixtures,
         key=lambda x: x["kickoff"]
     )
 
-
     now = datetime.now(
         timezone.utc
     )
-
 
     epg_start = now.replace(
         minute=0,
@@ -242,12 +234,10 @@ def create_xmltv(
         microsecond=0
     )
 
-
     epg_end = (
         epg_start +
         timedelta(hours=240)
     )
-
 
     # -----------------------------------------------------
     # Create timeline separately for each club
@@ -261,9 +251,7 @@ def create_xmltv(
             if f.get("channel_id") == channel_id
         ]
 
-
         current = epg_start
-
 
         for match in channel_matches:
 
@@ -271,20 +259,16 @@ def create_xmltv(
                 match["kickoff"]
             )
 
-
             match_end = (
                 kickoff +
                 MATCH_DURATION
             )
 
-
             if match_end <= epg_start:
                 continue
 
-
             if kickoff >= epg_end:
                 break
-
 
             # -------------------------------------------------
             # Next Game programme before the match
@@ -300,21 +284,20 @@ def create_xmltv(
                     fixtures
                 )
 
-
             live_start = max(
                 kickoff,
                 epg_start
             )
-
 
             live_end = min(
                 match_end,
                 epg_end
             )
 
-
             # -------------------------------------------------
             # Live match programme
+            #
+            # 🔴 added to the end of the title
             # -------------------------------------------------
 
             add_programme(
@@ -326,7 +309,7 @@ def create_xmltv(
                     f"⚽ "
                     f"{match['home']} vs "
                     f"{match['away']} "
-                    f"ˡⁱᵛᵉ"
+                    f"ˡⁱᵛᵉ 🔴"
                 ),
                 (
                     f"{match['competition']}\n"
@@ -337,12 +320,10 @@ def create_xmltv(
                 )
             )
 
-
             current = max(
                 current,
                 match_end
             )
-
 
         # -----------------------------------------------------
         # Fill remaining EPG time with Next Game
@@ -358,7 +339,6 @@ def create_xmltv(
                 fixtures
             )
 
-
     # ---------------------------------------------------------
     # Save XMLTV
     # ---------------------------------------------------------
@@ -367,7 +347,6 @@ def create_xmltv(
         parents=True,
         exist_ok=True
     )
-
 
     ET.ElementTree(tv).write(
         filename,
