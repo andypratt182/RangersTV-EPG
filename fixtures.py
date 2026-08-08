@@ -26,99 +26,42 @@ UK_TZ = ZoneInfo(
 # SETTINGS
 # ============================================================
 
-# Number of days of upcoming fixtures to collect.
 FIXTURE_DAYS = 24
 
-# How long after scheduled kick-off a match can remain
-# in the fixture data when Sportmonks has not supplied
-# a recognised live state.
 LIVE_FALLBACK_MINUTES = 150
 
-# Season we want.
-TARGET_SEASON = "2026/27"
+TARGET_SEASON = "2026/2027"
 
 
 # ============================================================
-# KNOWN PREMIERSHIP FALLBACK
-# ============================================================
-#
-# These are already confirmed from your working setup.
-#
-# The cups are NOT hard-coded.
-# They are discovered automatically below.
-#
+# CONFIRMED SCOTTISH PREMIERSHIP
 # ============================================================
 
 KNOWN_PREMIERSHIP_ID = 501
+
 KNOWN_PREMIERSHIP_SEASON_ID = 28275
 
 
 # ============================================================
-# COMPETITION SEARCH NAMES
-# ============================================================
-#
-# Sportmonks may use slightly different names for competitions.
-#
-# We therefore search using several possible names.
-#
+# COMPETITION SEARCH TERMS
 # ============================================================
 
-COMPETITION_SEARCHES = {
+SCOTTISH_CUP_NAMES = {
 
-    "scottish_premiership": {
+    "scottish cup",
+    "scottish fa cup",
+    "sfa cup",
+    "scottish football association cup"
+}
 
-        "display_name":
-            "Scottish Premiership",
 
-        "names": [
+SCOTTISH_LEAGUE_CUP_NAMES = {
 
-            "Scottish Premiership",
-
-            "Premiership",
-
-            "Scottish Premier"
-        ]
-    },
-
-    "scottish_cup": {
-
-        "display_name":
-            "Scottish Cup",
-
-        "names": [
-
-            "Scottish Cup",
-
-            "Scottish Football Association Cup",
-
-            "Scottish FA Cup",
-
-            "SFA Cup"
-        ]
-    },
-
-    "scottish_league_cup": {
-
-        "display_name":
-            "Scottish League Cup",
-
-        "names": [
-
-            "Scottish League Cup",
-
-            "League Cup",
-
-            "Scottish League Cup",
-
-            "Premier Sports Cup",
-
-            "Viaplay Cup",
-
-            "Betfred Cup",
-
-            "Cinch Premiership Cup"
-        ]
-    }
+    "scottish league cup",
+    "league cup",
+    "premier sports cup",
+    "viaplay cup",
+    "betfred cup"
 }
 
 
@@ -137,7 +80,9 @@ def sportmonks_get(
     )
 
     request_params = {
-        "api_token": token
+
+        "api_token":
+            token
     }
 
     if params:
@@ -147,12 +92,16 @@ def sportmonks_get(
         )
 
     response = requests.get(
+
         url,
+
         params=request_params,
+
         headers={
             "Accept":
                 "application/json"
         },
+
         timeout=30
     )
 
@@ -160,7 +109,9 @@ def sportmonks_get(
 
         print()
         print("==============================")
-        print("SPORTMONKS API ERROR")
+        print(
+            "SPORTMONKS API ERROR"
+        )
         print("==============================")
 
         print(
@@ -186,34 +137,7 @@ def sportmonks_get(
 
 
 # ============================================================
-# NORMALISE COMPETITION NAME
-# ============================================================
-
-def normalise_competition_name(
-    name
-):
-
-    if not name:
-
-        return ""
-
-    name = str(
-        name
-    ).lower().strip()
-
-    name = re.sub(
-        r"[^\w\s]",
-        " ",
-        name
-    )
-
-    return " ".join(
-        name.split()
-    )
-
-
-# ============================================================
-# NORMALISE TEAM NAME
+# NORMALISE NAME
 # ============================================================
 
 def normalise_team_name(
@@ -251,15 +175,86 @@ def normalise_team_name(
 
 
 # ============================================================
-# GET ALL SPORTMONKS LEAGUES
+# GET CONFIGURED TEAMS
 # ============================================================
-#
-# We deliberately discover competitions rather than assuming
-# their IDs.
-#
-# Sportmonks paginates the leagues endpoint, so we continue
-# through available pages.
-#
+
+def get_allowed_team_names():
+
+    allowed = {}
+
+    for channel_id, team in (
+        SPFL_TEAMS.items()
+    ):
+
+        channel_name = team[
+            "name"
+        ]
+
+        football_name = channel_name
+
+        if football_name.endswith(
+            " TV"
+        ):
+
+            football_name = (
+                football_name[:-3]
+            )
+
+        normalised = (
+            normalise_team_name(
+                football_name
+            )
+        )
+
+        allowed[
+            normalised
+        ] = {
+
+            "channel_id":
+                channel_id,
+
+            "name":
+                channel_name,
+
+            "stadium":
+                team.get(
+                    "stadium",
+                    "Venue TBC"
+                )
+        }
+
+    return allowed
+
+
+# ============================================================
+# NORMALISE COMPETITION NAME
+# ============================================================
+
+def normalise_competition_name(
+    name
+):
+
+    if not name:
+
+        return ""
+
+    name = str(
+        name
+    ).lower().strip()
+
+    name = re.sub(
+        r"[^\w\s]",
+        " ",
+        name
+    )
+
+    return " ".join(
+        name.split()
+    )
+
+
+# ============================================================
+# GET LEAGUES
 # ============================================================
 
 def get_all_leagues(
@@ -278,18 +273,18 @@ def get_all_leagues(
 
     page = 1
 
-    max_pages = 20
-
-    while page <= max_pages:
+    while True:
 
         print(
-            f"Checking leagues page {page}..."
+            f"Checking leagues page "
+            f"{page}..."
         )
 
         data = sportmonks_get(
             "leagues",
             token,
             {
+
                 "page":
                     page,
 
@@ -316,46 +311,36 @@ def get_all_leagues(
             {}
         )
 
-        has_more = pagination.get(
-            "has_more"
+        current_page = pagination.get(
+            "current_page"
         )
-
-        if has_more is False:
-
-            break
-
-        # ----------------------------------------------------
-        # Some Sportmonks responses expose current/last page
-        # instead of has_more.
-        # ----------------------------------------------------
 
         last_page = pagination.get(
             "last_page"
         )
 
-        current_page = pagination.get(
-            "current_page"
+        has_more = pagination.get(
+            "has_more"
         )
 
         if (
-            last_page is not None
-            and
+            has_more is False
+        ):
+
+            break
+
+        if (
             current_page is not None
+            and
+            last_page is not None
             and
             current_page >= last_page
         ):
 
             break
 
-        # Safety check.
-        #
-        # If pagination information isn't available and we
-        # received fewer than 100 results, assume this is the
-        # final page.
-        # ----------------------------------------------------
-
         if (
-            not has_more
+            has_more is None
             and
             last_page is None
             and
@@ -366,8 +351,17 @@ def get_all_leagues(
 
         page += 1
 
+        if page > 50:
+
+            print(
+                "Stopping league discovery "
+                "after 50 pages."
+            )
+
+            break
+
     # --------------------------------------------------------
-    # Remove duplicate league IDs.
+    # Remove duplicates.
     # --------------------------------------------------------
 
     unique = {}
@@ -391,145 +385,83 @@ def get_all_leagues(
     print()
     print(
         f"Discovered {len(leagues)} "
-        f"unique Sportmonks competitions."
+        f"unique competitions."
     )
 
     return leagues
 
 
 # ============================================================
-# FIND TARGET COMPETITION
+# FIND COMPETITION BY NAME
 # ============================================================
 
 def find_competition(
     leagues,
-    competition_key
+    names
 ):
 
-    config = COMPETITION_SEARCHES[
-        competition_key
-    ]
+    wanted = {
 
-    wanted_names = [
         normalise_competition_name(
             name
         )
-        for name in config[
-            "names"
-        ]
-    ]
 
-    print()
-    print(
-        "Searching for:"
-    )
-
-    print(
-        f"  {config['display_name']}"
-    )
+        for name in names
+    }
 
     # --------------------------------------------------------
-    # First attempt: exact name match.
+    # Exact match first.
     # --------------------------------------------------------
 
     for league in leagues:
 
-        league_name = league.get(
+        name = league.get(
             "name",
             ""
         )
 
         normalised = (
             normalise_competition_name(
-                league_name
+                name
             )
         )
 
-        if normalised in wanted_names:
-
-            print()
-            print(
-                "COMPETITION FOUND"
-            )
-
-            print(
-                "---------------"
-            )
-
-            print(
-                f"Name: {league_name}"
-            )
-
-            print(
-                f"ID: "
-                f"{league.get('id')}"
-            )
+        if normalised in wanted:
 
             return league
 
     # --------------------------------------------------------
-    # Second attempt: contains match.
-    #
-    # This handles names such as:
-    #
-    # "Scottish League Cup"
-    # "Scottish League Cup 2026"
-    #
+    # Partial match second.
     # --------------------------------------------------------
 
     for league in leagues:
 
-        league_name = league.get(
+        name = league.get(
             "name",
             ""
         )
 
         normalised = (
             normalise_competition_name(
-                league_name
+                name
             )
         )
 
-        for wanted in wanted_names:
+        for search_name in wanted:
 
             if (
-                wanted
+                search_name
                 and
-                wanted in normalised
+                search_name in normalised
             ):
 
-                print()
-                print(
-                    "COMPETITION FOUND "
-                    "(PARTIAL MATCH)"
-                )
-
-                print(
-                    "---------------"
-                )
-
-                print(
-                    f"Name: {league_name}"
-                )
-
-                print(
-                    f"ID: "
-                    f"{league.get('id')}"
-                )
-
                 return league
-
-    print()
-    print(
-        f"WARNING: Could not discover "
-        f"{config['display_name']}."
-    )
 
     return None
 
 
 # ============================================================
-# GET SEASONS FOR LEAGUE
+# GET LEAGUE SEASONS
 # ============================================================
 
 def get_league_seasons(
@@ -538,8 +470,11 @@ def get_league_seasons(
 ):
 
     data = sportmonks_get(
+
         f"leagues/{league_id}",
+
         token,
+
         {
             "include":
                 "seasons"
@@ -551,11 +486,9 @@ def get_league_seasons(
         {}
     )
 
-    return (
-        league.get(
-            "seasons",
-            []
-        )
+    return league.get(
+        "seasons",
+        []
     )
 
 
@@ -566,7 +499,7 @@ def get_league_seasons(
 def find_target_season(
     league,
     token,
-    competition_name
+    display_name
 ):
 
     league_id = league.get(
@@ -574,10 +507,11 @@ def find_target_season(
     )
 
     print()
+    print("==============================")
     print(
-        f"Checking {competition_name} "
-        f"season"
+        f"Checking {display_name} season"
     )
+    print("==============================")
 
     print(
         f"League ID: {league_id}"
@@ -589,13 +523,8 @@ def find_target_season(
     )
 
     print(
-        f"Found {len(seasons)} "
-        f"season(s)"
+        f"Found {len(seasons)} season(s)"
     )
-
-    # --------------------------------------------------------
-    # Display available seasons.
-    # --------------------------------------------------------
 
     for season in seasons:
 
@@ -605,27 +534,24 @@ def find_target_season(
         )
 
     # --------------------------------------------------------
-    # Look for 2026/27.
+    # Exact season name.
     # --------------------------------------------------------
-
-    target_strings = {
-
-        "2026/27",
-        "2026/2027",
-        "2026 - 2027",
-        "2026-2027"
-    }
 
     for season in seasons:
 
-        season_name = str(
+        name = str(
             season.get(
                 "name",
                 ""
             )
         ).strip()
 
-        if season_name in target_strings:
+        if name in (
+            "2026/2027",
+            "2026/27",
+            "2026 - 2027",
+            "2026-2027"
+        ):
 
             print()
             print(
@@ -639,18 +565,18 @@ def find_target_season(
 
             print(
                 f"  Name: "
-                f"{season_name}"
+                f"{name}"
             )
 
             return season
 
     # --------------------------------------------------------
-    # More flexible search.
+    # Flexible season search.
     # --------------------------------------------------------
 
     for season in seasons:
 
-        season_name = str(
+        name = str(
             season.get(
                 "name",
                 ""
@@ -658,16 +584,9 @@ def find_target_season(
         )
 
         if (
-            "2026"
-            in season_name
+            "2026" in name
             and
-            (
-                "2027"
-                in season_name
-                or
-                "26/27"
-                in season_name
-            )
+            "2027" in name
         ):
 
             print()
@@ -683,22 +602,20 @@ def find_target_season(
 
             print(
                 f"  Name: "
-                f"{season_name}"
+                f"{name}"
             )
 
             return season
 
     # --------------------------------------------------------
-    # Check year field.
+    # Year field fallback.
     # --------------------------------------------------------
 
     for season in seasons:
 
-        year = season.get(
-            "year"
-        )
-
-        if str(year) == "2026":
+        if str(
+            season.get("year")
+        ) == "2026":
 
             print()
             print(
@@ -722,14 +639,14 @@ def find_target_season(
     print(
         f"WARNING: Could not find "
         f"2026/27 season for "
-        f"{competition_name}."
+        f"{display_name}."
     )
 
     return None
 
 
 # ============================================================
-# DISCOVER ALL SCOTTISH COMPETITIONS
+# DISCOVER SCOTTISH COMPETITIONS
 # ============================================================
 
 def discover_competitions(
@@ -742,27 +659,49 @@ def discover_competitions(
 
     discovered = {}
 
-    # --------------------------------------------------------
-    # Discover Premiership.
-    # --------------------------------------------------------
+    # ========================================================
+    # PREMIERSHIP
+    # ========================================================
 
     premiership = find_competition(
         leagues,
-        "scottish_premiership"
+        {
+            "Scottish Premiership",
+            "Premiership"
+        }
     )
 
     if premiership:
 
+        print()
+        print(
+            "Scottish Premiership "
+            "competition found."
+        )
+
+        print(
+            f"Name: "
+            f"{premiership.get('name')}"
+        )
+
+        print(
+            f"ID: "
+            f"{premiership.get('id')}"
+        )
+
         season = find_target_season(
+
             premiership,
+
             token,
+
             "Scottish Premiership"
         )
 
         if season:
 
             discovered[
-                "scottish_premiership"
+                "premiership"
             ] = {
 
                 "league_id":
@@ -776,25 +715,23 @@ def discover_competitions(
             }
 
     # --------------------------------------------------------
-    # Known Premiership fallback.
-    #
-    # This protects the working configuration you already
-    # have if the league discovery endpoint behaves differently.
+    # Confirmed fallback.
     # --------------------------------------------------------
 
     if (
-        "scottish_premiership"
+        "premiership"
         not in discovered
     ):
 
         print()
         print(
-            "Using confirmed Scottish "
-            "Premiership fallback."
+            "Using confirmed "
+            "Scottish Premiership "
+            "fallback."
         )
 
         discovered[
-            "scottish_premiership"
+            "premiership"
         ] = {
 
             "league_id":
@@ -807,20 +744,47 @@ def discover_competitions(
                 "Scottish Premiership"
         }
 
-    # --------------------------------------------------------
-    # Discover Scottish Cup.
-    # --------------------------------------------------------
+    # ========================================================
+    # SCOTTISH CUP
+    # ========================================================
+
+    print()
+    print(
+        "Searching for:"
+    )
+
+    print(
+        "  Scottish Cup"
+    )
 
     scottish_cup = find_competition(
         leagues,
-        "scottish_cup"
+        SCOTTISH_CUP_NAMES
     )
 
     if scottish_cup:
 
+        print()
+        print(
+            "SCOTTISH CUP FOUND"
+        )
+
+        print(
+            f"Name: "
+            f"{scottish_cup.get('name')}"
+        )
+
+        print(
+            f"ID: "
+            f"{scottish_cup.get('id')}"
+        )
+
         season = find_target_season(
+
             scottish_cup,
+
             token,
+
             "Scottish Cup"
         )
 
@@ -840,20 +804,56 @@ def discover_competitions(
                     "Scottish Cup"
             }
 
-    # --------------------------------------------------------
-    # Discover Scottish League Cup.
-    # --------------------------------------------------------
+    else:
+
+        print()
+        print(
+            "WARNING: Scottish Cup "
+            "was not found in the "
+            "Sportmonks leagues endpoint."
+        )
+
+    # ========================================================
+    # SCOTTISH LEAGUE CUP
+    # ========================================================
+
+    print()
+    print(
+        "Searching for:"
+    )
+
+    print(
+        "  Scottish League Cup"
+    )
 
     league_cup = find_competition(
         leagues,
-        "scottish_league_cup"
+        SCOTTISH_LEAGUE_CUP_NAMES
     )
 
     if league_cup:
 
+        print()
+        print(
+            "SCOTTISH LEAGUE CUP FOUND"
+        )
+
+        print(
+            f"Name: "
+            f"{league_cup.get('name')}"
+        )
+
+        print(
+            f"ID: "
+            f"{league_cup.get('id')}"
+        )
+
         season = find_target_season(
+
             league_cup,
+
             token,
+
             "Scottish League Cup"
         )
 
@@ -873,9 +873,18 @@ def discover_competitions(
                     "Scottish League Cup"
             }
 
-    # --------------------------------------------------------
-    # Summary.
-    # --------------------------------------------------------
+    else:
+
+        print()
+        print(
+            "WARNING: Scottish League Cup "
+            "was not found in the "
+            "Sportmonks leagues endpoint."
+        )
+
+    # ========================================================
+    # SUMMARY
+    # ========================================================
 
     print()
     print("==============================")
@@ -885,8 +894,8 @@ def discover_competitions(
     )
     print("==============================")
 
-    for key, competition in (
-        discovered.items()
+    for competition in (
+        discovered.values()
     ):
 
         print(
@@ -907,7 +916,7 @@ def discover_competitions(
 
 
 # ============================================================
-# EXTRACT FIXTURES FROM SCHEDULE
+# EXTRACT FIXTURES
 # ============================================================
 
 def extract_schedule_fixtures(
@@ -924,20 +933,25 @@ def extract_schedule_fixtures(
         ):
 
             if (
-                value.get("id") is not None
+                value.get("id")
+                is not None
                 and
                 value.get(
                     "starting_at"
-                ) is not None
+                )
+                is not None
                 and
-                "participants" in value
+                "participants"
+                in value
             ):
 
                 fixtures.append(
                     value
                 )
 
-            for child in value.values():
+            for child in (
+                value.values()
+            ):
 
                 walk(child)
 
@@ -951,10 +965,6 @@ def extract_schedule_fixtures(
                 walk(child)
 
     walk(data)
-
-    # --------------------------------------------------------
-    # Remove duplicate fixture IDs.
-    # --------------------------------------------------------
 
     unique = {}
 
@@ -984,21 +994,19 @@ def download_competition_schedule(
     token
 ):
 
-    competition_name = competition[
-        "name"
-    ]
-
-    season_id = competition[
-        "season_id"
-    ]
-
     print()
-    print("==========================================")
+    print(
+        "=========================================="
+    )
+
     print(
         f"SPORTMONKS "
-        f"{competition_name.upper()} DOWNLOAD"
+        f"{competition['name'].upper()} DOWNLOAD"
     )
-    print("==========================================")
+
+    print(
+        "=========================================="
+    )
 
     print(
         f"League ID: "
@@ -1007,18 +1015,19 @@ def download_competition_schedule(
 
     print(
         f"Season ID: "
-        f"{season_id}"
+        f"{competition['season_id']}"
     )
 
     print()
-    print(
-        f"Downloading 2026/27 "
-        f"{competition_name} schedule..."
-    )
 
     endpoint = (
-        f"schedules/seasons/"
-        f"{season_id}"
+        "schedules/seasons/"
+        f"{competition['season_id']}"
+    )
+
+    print(
+        f"Downloading 2026/27 "
+        f"{competition['name']} schedule..."
     )
 
     data = sportmonks_get(
@@ -1031,33 +1040,31 @@ def download_competition_schedule(
     )
 
     print()
+
     print(
         f"Sportmonks returned "
         f"{len(events)} fixture(s) "
-        f"for {competition_name}"
+        f"for "
+        f"{competition['name']}"
     )
 
     # --------------------------------------------------------
-    # Attach EPG competition information.
+    # Add our own competition label.
     # --------------------------------------------------------
 
     for event in events:
 
         event[
             "_epg_competition"
-        ] = competition_name
-
-        event[
-            "_epg_league_id"
         ] = competition[
-            "league_id"
+            "name"
         ]
 
     return events
 
 
 # ============================================================
-# DOWNLOAD ALL SCOTTISH COMPETITIONS
+# DOWNLOAD EVERYTHING
 # ============================================================
 
 def download_all_schedules():
@@ -1069,23 +1076,18 @@ def download_all_schedules():
     if not token:
 
         raise RuntimeError(
-            "SPORTMONKS_API_TOKEN environment "
-            "variable is not set."
+            "SPORTMONKS_API_TOKEN "
+            "environment variable "
+            "is not set."
         )
 
-    # --------------------------------------------------------
-    # Automatically discover competitions.
-    # --------------------------------------------------------
-
-    competitions = discover_competitions(
-        token
+    competitions = (
+        discover_competitions(
+            token
+        )
     )
 
     all_events = []
-
-    # --------------------------------------------------------
-    # Download each discovered competition.
-    # --------------------------------------------------------
 
     for competition in (
         competitions.values()
@@ -1107,14 +1109,9 @@ def download_all_schedules():
         except Exception as e:
 
             print()
-            print("==============================")
             print(
-                "WARNING: COMPETITION "
-                "DOWNLOAD FAILED"
-            )
-
-            print(
-                f"Competition: "
+                "WARNING: Could not "
+                f"download "
                 f"{competition['name']}"
             )
 
@@ -1123,12 +1120,12 @@ def download_all_schedules():
             )
 
             print(
-                "Continuing with the "
-                "remaining competitions."
+                "Continuing with "
+                "other competitions."
             )
 
     # --------------------------------------------------------
-    # Remove duplicate fixture IDs.
+    # Remove duplicate fixtures.
     # --------------------------------------------------------
 
     unique = {}
@@ -1162,6 +1159,115 @@ def download_all_schedules():
     )
 
     return events
+
+
+# ============================================================
+# PARSE KICKOFF
+# ============================================================
+
+def parse_kickoff(
+    value
+):
+
+    if not value:
+
+        return None
+
+    try:
+
+        kickoff = datetime.fromisoformat(
+            value.replace(
+                "Z",
+                "+00:00"
+            )
+        )
+
+    except ValueError:
+
+        print(
+            "WARNING: Could not parse "
+            f"kickoff: {value}"
+        )
+
+        return None
+
+    if kickoff.tzinfo is None:
+
+        kickoff = kickoff.replace(
+            tzinfo=timezone.utc
+        )
+
+    return kickoff
+
+
+# ============================================================
+# GET PARTICIPANTS
+# ============================================================
+
+def get_participants(
+    event
+):
+
+    participants = event.get(
+        "participants",
+        []
+    )
+
+    home = None
+
+    away = None
+
+    for participant in participants:
+
+        name = participant.get(
+            "name",
+            ""
+        )
+
+        meta = participant.get(
+            "meta",
+            {}
+        )
+
+        location = meta.get(
+            "location"
+        )
+
+        if location == "home":
+
+            home = name
+
+        elif location == "away":
+
+            away = name
+
+    # --------------------------------------------------------
+    # Fallback.
+    # --------------------------------------------------------
+
+    if not home or not away:
+
+        names = [
+
+            p.get(
+                "name",
+                ""
+            )
+
+            for p in participants
+        ]
+
+        if len(names) >= 2:
+
+            if not home:
+
+                home = names[0]
+
+            if not away:
+
+                away = names[1]
+
+    return home, away
 
 
 # ============================================================
@@ -1289,7 +1395,7 @@ def is_finished_status(
 
 
 # ============================================================
-# PROCESS COMPLETE SCHEDULE
+# BUILD FIXTURES
 # ============================================================
 
 def build_fixtures(
@@ -1309,7 +1415,8 @@ def build_fixtures(
     start_date = today
 
     end_date = (
-        today +
+        today
+        +
         timedelta(
             days=FIXTURE_DAYS
         )
@@ -1357,16 +1464,12 @@ def build_fixtures(
 
     for team in SPFL_TEAMS.values():
 
-        channel_name = team[
-            "name"
-        ]
-
         channel_fixtures[
-            channel_name
+            team["name"]
         ] = []
 
     # --------------------------------------------------------
-    # Process each Sportmonks fixture.
+    # Process fixtures.
     # --------------------------------------------------------
 
     for event in events:
@@ -1381,8 +1484,10 @@ def build_fixtures(
 
             continue
 
-        kickoff_uk = kickoff.astimezone(
-            UK_TZ
+        kickoff_uk = (
+            kickoff.astimezone(
+                UK_TZ
+            )
         )
 
         status = get_event_status(
@@ -1393,31 +1498,42 @@ def build_fixtures(
             status
         )
 
-        finished = is_finished_status(
-            status
+        finished = (
+            is_finished_status(
+                status
+            )
         )
 
         # ----------------------------------------------------
-        # Date window.
+        # Date range.
         # ----------------------------------------------------
 
-        if kickoff_uk.date() < start_date:
+        if (
+            kickoff_uk.date()
+            <
+            start_date
+        ):
 
             continue
 
-        if kickoff_uk.date() > end_date:
+        if (
+            kickoff_uk.date()
+            >
+            end_date
+        ):
 
             continue
 
         # ----------------------------------------------------
-        # Completed/cancelled/postponed.
+        # Completed fixtures.
         # ----------------------------------------------------
 
         if finished and not live:
 
             print()
             print(
-                f"Skipping completed event "
+                f"Skipping completed "
+                f"event "
                 f"{event.get('id')}: "
                 f"{status}"
             )
@@ -1441,12 +1557,12 @@ def build_fixtures(
             )
 
             print(
-                f"Status: {status}"
+                f"Status: "
+                f"{status}"
             )
 
         # ----------------------------------------------------
-        # Kick-off has passed but Sportmonks hasn't supplied
-        # a recognised live state.
+        # Kick-off passed but no live status.
         # ----------------------------------------------------
 
         elif kickoff <= now_utc:
@@ -1456,7 +1572,8 @@ def build_fixtures(
             ).total_seconds() / 60
 
             if (
-                age_minutes >
+                age_minutes
+                >
                 LIVE_FALLBACK_MINUTES
             ):
 
@@ -1464,7 +1581,8 @@ def build_fixtures(
                 print(
                     f"Skipping old fixture "
                     f"{event.get('id')}: "
-                    f"{int(age_minutes)} minutes old"
+                    f"{int(age_minutes)} "
+                    f"minutes old"
                 )
 
                 continue
@@ -1486,19 +1604,22 @@ def build_fixtures(
             )
 
         # ----------------------------------------------------
-        # Participants.
+        # Teams.
         # ----------------------------------------------------
 
-        home, away = get_participants(
-            event
+        home, away = (
+            get_participants(
+                event
+            )
         )
 
         if not home or not away:
 
             print()
             print(
-                "WARNING: Could not identify "
-                "home/away teams."
+                "WARNING: Could not "
+                "identify home/away "
+                "teams."
             )
 
             print(
@@ -1508,18 +1629,23 @@ def build_fixtures(
 
             continue
 
-        home_key = normalise_team_name(
-            home
+        home_key = (
+            normalise_team_name(
+                home
+            )
         )
 
-        away_key = normalise_team_name(
-            away
+        away_key = (
+            normalise_team_name(
+                away
+            )
         )
 
         # ----------------------------------------------------
-        # Find all configured clubs involved.
+        # Match every configured club.
         #
-        # Old Firm matches therefore appear on both channels.
+        # This allows an Old Firm fixture to appear on both
+        # Rangers TV and Celtic TV.
         # ----------------------------------------------------
 
         matched_teams = []
@@ -1555,9 +1681,6 @@ def build_fixtures(
 
         # ----------------------------------------------------
         # Stadium.
-        #
-        # Prefer Sportmonks venue information.
-        # Otherwise use the configured home club stadium.
         # ----------------------------------------------------
 
         stadium = "Venue TBC"
@@ -1571,13 +1694,17 @@ def build_fixtures(
             dict
         ):
 
-            stadium = (
-                venue.get(
-                    "name"
-                )
-                or
-                stadium
+            venue_name = venue.get(
+                "name"
             )
+
+            if venue_name:
+
+                stadium = venue_name
+
+        # ----------------------------------------------------
+        # Fall back to configured home stadium.
+        # ----------------------------------------------------
 
         if (
             stadium == "Venue TBC"
@@ -1592,18 +1719,24 @@ def build_fixtures(
             ]
 
         # ----------------------------------------------------
-        # Add to every relevant channel.
+        # Add fixture to every relevant channel.
         # ----------------------------------------------------
 
-        for matched_team in matched_teams:
+        for matched_team in (
+            matched_teams
+        ):
 
             fixture = {
 
                 "channel":
-                    matched_team["name"],
+                    matched_team[
+                        "name"
+                    ],
 
                 "channel_id":
-                    matched_team["channel_id"],
+                    matched_team[
+                        "channel_id"
+                    ],
 
                 "home":
                     home,
@@ -1638,7 +1771,9 @@ def build_fixtures(
             }
 
             channel_name = (
-                matched_team["name"]
+                matched_team[
+                    "name"
+                ]
             )
 
             channel_fixtures[
@@ -1687,7 +1822,8 @@ def build_fixtures(
             )
 
             print(
-                f"Live: {live}"
+                f"Live: "
+                f"{live}"
             )
 
             print(
@@ -1696,10 +1832,12 @@ def build_fixtures(
             )
 
     # --------------------------------------------------------
-    # Sort chronologically.
+    # Sort each channel.
     # --------------------------------------------------------
 
-    for channel_name in channel_fixtures:
+    for channel_name in (
+        channel_fixtures
+    ):
 
         channel_fixtures[
             channel_name
@@ -1736,7 +1874,9 @@ def build_fixtures(
                 "live"
             ):
 
-                live_marker = " [LIVE]"
+                live_marker = (
+                    " [LIVE]"
+                )
 
             print(
                 f"  {fixture['kickoff']} - "
@@ -1750,113 +1890,7 @@ def build_fixtures(
 
 
 # ============================================================
-# PARSE KICKOFF
-# ============================================================
-
-def parse_kickoff(
-    value
-):
-
-    if not value:
-
-        return None
-
-    try:
-
-        kickoff = datetime.fromisoformat(
-            value.replace(
-                "Z",
-                "+00:00"
-            )
-        )
-
-    except ValueError:
-
-        print(
-            "WARNING: Could not parse "
-            f"kickoff: {value}"
-        )
-
-        return None
-
-    if kickoff.tzinfo is None:
-
-        kickoff = kickoff.replace(
-            tzinfo=timezone.utc
-        )
-
-    return kickoff
-
-
-# ============================================================
-# GET PARTICIPANTS
-# ============================================================
-
-def get_participants(
-    event
-):
-
-    participants = event.get(
-        "participants",
-        []
-    )
-
-    home = None
-    away = None
-
-    for participant in participants:
-
-        name = participant.get(
-            "name",
-            ""
-        )
-
-        meta = participant.get(
-            "meta",
-            {}
-        )
-
-        location = meta.get(
-            "location"
-        )
-
-        if location == "home":
-
-            home = name
-
-        elif location == "away":
-
-            away = name
-
-    # --------------------------------------------------------
-    # Fallback if location metadata isn't available.
-    # --------------------------------------------------------
-
-    if not home or not away:
-
-        names = [
-            p.get(
-                "name",
-                ""
-            )
-            for p in participants
-        ]
-
-        if len(names) >= 2:
-
-            if not home:
-
-                home = names[0]
-
-            if not away:
-
-                away = names[1]
-
-    return home, away
-
-
-# ============================================================
-# GET FIXTURES
+# CACHE
 # ============================================================
 
 _SCHEDULE_CACHE = None
@@ -1864,15 +1898,20 @@ _SCHEDULE_CACHE = None
 _FIXTURE_CACHE = None
 
 
+# ============================================================
+# GET FIXTURES
+# ============================================================
+
 def get_fixtures(
     team
 ):
 
     global _SCHEDULE_CACHE
+
     global _FIXTURE_CACHE
 
     # --------------------------------------------------------
-    # Download/process everything only once per generator run.
+    # Download and process only once per generator run.
     # --------------------------------------------------------
 
     if _FIXTURE_CACHE is None:
@@ -1881,17 +1920,21 @@ def get_fixtures(
             download_all_schedules()
         )
 
-        _FIXTURE_CACHE = build_fixtures(
-            _SCHEDULE_CACHE
+        _FIXTURE_CACHE = (
+            build_fixtures(
+                _SCHEDULE_CACHE
+            )
         )
 
     channel_name = team[
         "name"
     ]
 
-    fixtures = _FIXTURE_CACHE.get(
-        channel_name,
-        []
+    fixtures = (
+        _FIXTURE_CACHE.get(
+            channel_name,
+            []
+        )
     )
 
     print()
@@ -1899,8 +1942,8 @@ def get_fixtures(
 
     print(
         f"Found {len(fixtures)} "
-        f"upcoming/live fixtures for "
-        f"{channel_name}"
+        f"upcoming/live fixtures "
+        f"for {channel_name}"
     )
 
     print(
@@ -1910,7 +1953,8 @@ def get_fixtures(
     if not fixtures:
 
         print(
-            f"No upcoming/live fixtures for "
+            f"No upcoming/live "
+            f"fixtures for "
             f"{channel_name}"
         )
 
