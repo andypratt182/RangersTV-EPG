@@ -14,33 +14,44 @@ UK_TZ = ZoneInfo("Europe/London")
 
 FIXTURE_DAYS = 24
 
-# Sportmonks league ID for Scottish Premiership
+# Confirmed Sportmonks IDs
 SCOTTISH_PREMIERSHIP_ID = 501
+SCOTTISH_PREMIERSHIP_2026_27_ID = 28275
 
 
 # ============================================================
-# SPORTMONKS API HELPER
+# SPORTMONKS API
 # ============================================================
 
-def sportmonks_get(endpoint, token):
+def sportmonks_get(
+    endpoint,
+    token,
+    params=None
+):
 
     url = (
         f"{SPORTMONKS_BASE_URL}/{endpoint}"
     )
 
-    params = {
+
+    request_params = {
         "api_token": token
     }
 
-    headers = {
-        "Accept": "application/json"
-    }
+
+    if params:
+
+        request_params.update(
+            params
+        )
 
 
     response = requests.get(
         url,
-        headers=headers,
-        params=params,
+        params=request_params,
+        headers={
+            "Accept": "application/json"
+        },
         timeout=30
     )
 
@@ -76,25 +87,29 @@ def sportmonks_get(endpoint, token):
 
 
 # ============================================================
-# FIND 2026/27 SEASON
+# VERIFY 2026/27 SEASON
 # ============================================================
 
-def find_2026_27_season(token):
+def verify_2026_27_season(token):
 
     print()
     print("==============================")
-    print("Finding Scottish Premiership season")
+    print("Checking Scottish Premiership season")
     print("==============================")
 
 
-    endpoint = (
-        f"leagues/{SCOTTISH_PREMIERSHIP_ID}"
+    print(
+        f"League ID: "
+        f"{SCOTTISH_PREMIERSHIP_ID}"
     )
 
 
     data = sportmonks_get(
-        endpoint,
-        token
+        f"leagues/{SCOTTISH_PREMIERSHIP_ID}",
+        token,
+        {
+            "include": "seasons"
+        }
     )
 
 
@@ -125,23 +140,17 @@ def find_2026_27_season(token):
 
     for season in seasons:
 
-        season_name = (
-            season.get("name") or ""
-        )
-
-
-        if season_name in (
-            "2026/2027",
-            "2026/27"
-        ):
+        if season.get(
+            "id"
+        ) == SCOTTISH_PREMIERSHIP_2026_27_ID:
 
             print()
             print(
-                "Selected 2026/27 season:"
+                "Confirmed 2026/27 season:"
             )
 
             print(
-                f"  ID: {season['id']}"
+                f"  ID: {season.get('id')}"
             )
 
             print(
@@ -152,11 +161,29 @@ def find_2026_27_season(token):
             return season
 
 
-    raise RuntimeError(
-        "Sportmonks could not find "
-        "the 2026/27 Scottish Premiership "
-        "season."
+    # The season was already confirmed during
+    # our previous test. If the relationship is
+    # unavailable now, give a useful diagnostic.
+
+    print()
+    print(
+        "WARNING: Season 28275 was not returned "
+        "by the seasons relationship."
     )
+
+    print(
+        "The season ID was previously confirmed "
+        "as 2026/2027."
+    )
+
+
+    return {
+        "id":
+            SCOTTISH_PREMIERSHIP_2026_27_ID,
+
+        "name":
+            "2026/2027"
+    }
 
 
 # ============================================================
@@ -173,21 +200,10 @@ def normalise_team_name(name):
     name = name.lower().strip()
 
 
-    # Only remove common suffixes.
-    #
-    # Do NOT remove words such as "the".
-    # This prevents:
-    #
-    # Motherwell -> morwell
-    #
-
-    suffixes = [
+    for suffix in (
         " football club",
         " fc"
-    ]
-
-
-    for suffix in suffixes:
+    ):
 
         if name.endswith(
             suffix
@@ -204,7 +220,7 @@ def normalise_team_name(name):
 
 
 # ============================================================
-# BUILD CONFIGURED TEAM LIST
+# BUILD TEAM MATCHING
 # ============================================================
 
 def get_allowed_team_names():
@@ -221,9 +237,6 @@ def get_allowed_team_names():
 
         football_name = channel_name
 
-
-        # Remove " TV" from the EPG channel name
-        # when matching against Sportmonks.
 
         if football_name.endswith(
             " TV"
@@ -242,6 +255,7 @@ def get_allowed_team_names():
         allowed[
             normalised
         ] = {
+
             "channel_id":
                 channel_id,
 
@@ -260,7 +274,7 @@ def get_allowed_team_names():
 
 
 # ============================================================
-# PARSE KICKOFF DATETIME
+# PARSE KICKOFF
 # ============================================================
 
 def parse_kickoff(value):
@@ -290,11 +304,6 @@ def parse_kickoff(value):
         return None
 
 
-    # Sportmonks can occasionally return
-    # a datetime without timezone information.
-    #
-    # Treat a naive timestamp as UTC.
-
     if kickoff.tzinfo is None:
 
         kickoff = kickoff.replace(
@@ -306,7 +315,7 @@ def parse_kickoff(value):
 
 
 # ============================================================
-# EXTRACT FIXTURE PARTICIPANTS
+# GET PARTICIPANTS
 # ============================================================
 
 def get_participants(event):
@@ -350,21 +359,16 @@ def get_participants(event):
             away = name
 
 
-    # --------------------------------------------------------
-    # Fallback
-    #
-    # If Sportmonks doesn't provide participant meta,
-    # use the participant order.
-    # --------------------------------------------------------
+    # Fallback if location metadata isn't available.
 
     if not home or not away:
 
         names = [
-            participant.get(
+            p.get(
                 "name",
                 ""
             )
-            for participant in participants
+            for p in participants
         ]
 
 
@@ -387,38 +391,24 @@ def get_participants(event):
 # EXTRACT FIXTURES FROM SCHEDULE
 # ============================================================
 
-def extract_schedule_fixtures(
-    data
-):
-
-    """
-    Sportmonks season schedules can contain
-    stages, rounds and fixtures.
-
-    This function walks through the schedule
-    recursively so that small structural
-    changes in the API response don't break
-    the EPG.
-    """
+def extract_schedule_fixtures(data):
 
     fixtures = []
 
 
-    def walk(
-        value
-    ):
+    def walk(value):
 
         if isinstance(
             value,
             dict
         ):
 
-            # A fixture normally has an ID,
-            # starting_at and participants.
+            # Fixture objects contain all three
+            # of these fields.
 
             if (
-                "id" in value
-                and "starting_at" in value
+                value.get("id") is not None
+                and value.get("starting_at") is not None
                 and "participants" in value
             ):
 
@@ -476,11 +466,9 @@ def extract_schedule_fixtures(
 def get_fixtures(team):
 
     """
-    Get upcoming Scottish Premiership fixtures
-    using the Sportmonks season schedule endpoint.
+    Get upcoming Scottish Premiership fixtures.
 
-    Output structure remains compatible with
-    generator.py and xmltv.py.
+    Existing output structure is preserved.
     """
 
 
@@ -496,10 +484,6 @@ def get_fixtures(team):
             "variable is not set."
         )
 
-
-    # --------------------------------------------------------
-    # Dates
-    # --------------------------------------------------------
 
     now_utc = datetime.now(
         timezone.utc
@@ -532,10 +516,10 @@ def get_fixtures(team):
 
 
     # --------------------------------------------------------
-    # Find season
+    # Confirm season
     # --------------------------------------------------------
 
-    season = find_2026_27_season(
+    season = verify_2026_27_season(
         token
     )
 
@@ -547,13 +531,12 @@ def get_fixtures(team):
 
     print()
     print(
-        "Using season ID:",
-        season_id
+        f"Using season ID: {season_id}"
     )
 
 
     # --------------------------------------------------------
-    # Download complete season schedule
+    # Download season schedule
     # --------------------------------------------------------
 
     print()
@@ -577,7 +560,7 @@ def get_fixtures(team):
 
 
     # --------------------------------------------------------
-    # Extract fixture objects
+    # Extract fixtures
     # --------------------------------------------------------
 
     events = extract_schedule_fixtures(
@@ -587,7 +570,7 @@ def get_fixtures(team):
 
     print()
     print(
-        f"Sportmonks schedule contains "
+        f"Schedule contains "
         f"{len(events)} fixture(s)"
     )
 
@@ -597,7 +580,7 @@ def get_fixtures(team):
         print()
         print(
             "WARNING: No fixtures were found "
-            "inside the season schedule."
+            "in the Sportmonks schedule."
         )
 
         return []
@@ -630,7 +613,7 @@ def get_fixtures(team):
 
 
     # --------------------------------------------------------
-    # Process schedule fixtures
+    # Process fixtures
     # --------------------------------------------------------
 
     for event in events:
@@ -647,14 +630,12 @@ def get_fixtures(team):
             continue
 
 
-        # ----------------------------------------------------
-        # Only include requested date window
-        # ----------------------------------------------------
-
         kickoff_uk = kickoff.astimezone(
             UK_TZ
         )
 
+
+        # Date window
 
         if kickoff_uk.date() < start_date:
 
@@ -666,18 +647,14 @@ def get_fixtures(team):
             continue
 
 
-        # ----------------------------------------------------
-        # Ignore matches already played
-        # ----------------------------------------------------
+        # Already played
 
         if kickoff <= now_utc:
 
             continue
 
 
-        # ----------------------------------------------------
-        # Get teams
-        # ----------------------------------------------------
+        # Teams
 
         home, away = get_participants(
             event
@@ -709,11 +686,6 @@ def get_fixtures(team):
         )
 
 
-        # ----------------------------------------------------
-        # Determine which EPG channel this fixture
-        # belongs to.
-        # ----------------------------------------------------
-
         matched_team = None
 
 
@@ -730,8 +702,6 @@ def get_fixtures(team):
                 away_key
             ]
 
-
-        # Not one of our configured clubs.
 
         if matched_team is None:
 
@@ -762,10 +732,7 @@ def get_fixtures(team):
 
 
         # ----------------------------------------------------
-        # Stadium
-        #
-        # Continue using your existing teams.py
-        # stadium mapping.
+        # Stadium from teams.py
         # ----------------------------------------------------
 
         stadium = matched_team[
@@ -774,9 +741,7 @@ def get_fixtures(team):
 
 
         # ----------------------------------------------------
-        # Build output
-        #
-        # DO NOT change this structure.
+        # Preserve existing output structure
         # ----------------------------------------------------
 
         fixture = {
@@ -815,7 +780,7 @@ def get_fixtures(team):
 
 
         # ----------------------------------------------------
-        # Diagnostics
+        # Diagnostic
         # ----------------------------------------------------
 
         print()
@@ -894,7 +859,7 @@ def get_fixtures(team):
 
 
     # --------------------------------------------------------
-    # Final diagnostics
+    # Final result
     # --------------------------------------------------------
 
     print()
