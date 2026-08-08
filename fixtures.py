@@ -1,5 +1,6 @@
 import os
 import requests
+import re
 
 from datetime import (
     datetime,
@@ -20,7 +21,13 @@ UK_TZ = ZoneInfo(
     "Europe/London"
 )
 
+# Number of days of upcoming fixtures to collect
 FIXTURE_DAYS = 24
+
+# How long after scheduled kick-off a match can remain
+# in the fixture data when Sportmonks has not supplied
+# a recognised live state.
+LIVE_FALLBACK_MINUTES = 150
 
 # Confirmed Sportmonks IDs
 SCOTTISH_PREMIERSHIP_ID = 501
@@ -96,7 +103,9 @@ def verify_2026_27_season(token):
 
     print()
     print("==============================")
-    print("Checking Scottish Premiership season")
+    print(
+        "Checking Scottish Premiership season"
+    )
     print("==============================")
 
     print(
@@ -154,9 +163,6 @@ def verify_2026_27_season(token):
 
             return season
 
-    # The 2026/27 season ID has previously
-    # been confirmed to work with the account.
-
     print()
     print(
         "WARNING: Season 28275 was not returned "
@@ -188,6 +194,24 @@ def normalise_team_name(name):
         return ""
 
     name = name.lower().strip()
+
+    # --------------------------------------------------------
+    # Remove punctuation.
+    #
+    # This makes:
+    #
+    # St. Johnstone -> st johnstone
+    # St Johnstone  -> st johnstone
+    #
+    # St. Mirren -> st mirren
+    # St Mirren  -> st mirren
+    # --------------------------------------------------------
+
+    name = re.sub(
+        r"[^\w\s]",
+        " ",
+        name
+    )
 
     for suffix in (
         " football club",
@@ -360,6 +384,135 @@ def get_participants(event):
 
 
 # ============================================================
+# EVENT STATUS
+# ============================================================
+
+def get_event_status(event):
+
+    """
+    Return a normalised Sportmonks event state.
+
+    Sportmonks may expose state information in
+    slightly different fields depending on the
+    endpoint/version, so several possibilities
+    are checked.
+    """
+
+    state = event.get(
+        "state"
+    )
+
+    if isinstance(
+        state,
+        dict
+    ):
+
+        for key in (
+            "short_name",
+            "name",
+            "developer_name"
+        ):
+
+            value = state.get(
+                key
+            )
+
+            if value:
+
+                return str(
+                    value
+                ).upper()
+
+    # Some responses may expose status directly.
+
+    status = event.get(
+        "status"
+    )
+
+    if isinstance(
+        status,
+        dict
+    ):
+
+        for key in (
+            "short_name",
+            "name",
+            "developer_name"
+        ):
+
+            value = status.get(
+                key
+            )
+
+            if value:
+
+                return str(
+                    value
+                ).upper()
+
+    elif status:
+
+        return str(
+            status
+        ).upper()
+
+    return ""
+
+
+# ============================================================
+# DETERMINE WHETHER MATCH IS LIVE
+# ============================================================
+
+def is_live_status(status):
+
+    if not status:
+
+        return False
+
+    live_states = {
+
+        "LIVE",
+        "HT",
+        "BREAK",
+        "ET",
+        "AET",
+        "PEN",
+        "PENALTIES",
+        "1H",
+        "2H",
+        "EXTRA_TIME"
+    }
+
+    return status in live_states
+
+
+# ============================================================
+# DETERMINE WHETHER MATCH IS FINISHED
+# ============================================================
+
+def is_finished_status(status):
+
+    if not status:
+
+        return False
+
+    finished_states = {
+
+        "FT",
+        "AET",
+        "AP",
+        "AFTER_PENALTIES",
+        "FINISHED",
+        "POSTPONED",
+        "CANCELLED",
+        "CANCELED",
+        "ABANDONED"
+    }
+
+    return status in finished_states
+
+
+# ============================================================
 # EXTRACT FIXTURES FROM SCHEDULE
 # ============================================================
 
@@ -439,7 +592,9 @@ def download_premiership_schedule():
 
     print()
     print("==========================================")
-    print("SPORTMONKS SCOTTISH PREMIERSHIP DOWNLOAD")
+    print(
+        "SPORTMONKS SCOTTISH PREMIERSHIP DOWNLOAD"
+    )
     print("==========================================")
 
     season = verify_2026_27_season(
@@ -493,14 +648,22 @@ def build_fixtures(events):
         timezone.utc
     )
 
-    today = datetime.now(
+    now_uk = now_utc.astimezone(
         UK_TZ
-    ).date()
-
-    start_date = (
-        today +
-        timedelta(days=1)
     )
+
+    today = now_uk.date()
+
+    # --------------------------------------------------------
+    # IMPORTANT:
+    #
+    # Start with TODAY, not tomorrow.
+    #
+    # This allows a fixture currently being played to
+    # reach the XMLTV generator.
+    # --------------------------------------------------------
+
+    start_date = today
 
     end_date = (
         today +
@@ -514,6 +677,11 @@ def build_fixtures(events):
 
     print(
         f"{start_date} → {end_date}"
+    )
+
+    print(
+        f"Current UK time: "
+        f"{now_uk.strftime('%Y-%m-%d %H:%M:%S')}"
     )
 
     allowed_teams = (
@@ -569,6 +737,18 @@ def build_fixtures(events):
             UK_TZ
         )
 
+        status = get_event_status(
+            event
+        )
+
+        live = is_live_status(
+            status
+        )
+
+        finished = is_finished_status(
+            status
+        )
+
         # ----------------------------------------------------
         # Date window
         # ----------------------------------------------------
@@ -582,12 +762,95 @@ def build_fixtures(events):
             continue
 
         # ----------------------------------------------------
-        # Already played
+        # Finished/cancelled/postponed matches
         # ----------------------------------------------------
 
-        if kickoff <= now_utc:
+        if finished and not live:
+
+            print()
+            print(
+                f"Skipping completed event "
+                f"{event.get('id')}: "
+                f"{status}"
+            )
 
             continue
+
+        # ----------------------------------------------------
+        # If Sportmonks says the match is live, ALWAYS keep it.
+        # ----------------------------------------------------
+
+        if live:
+
+            print()
+            print(
+                "LIVE FIXTURE DETECTED"
+            )
+
+            print(
+                "---------------"
+            )
+
+            print(
+                f"Fixture ID: "
+                f"{event.get('id')}"
+            )
+
+            print(
+                f"Status: {status}"
+            )
+
+        # ----------------------------------------------------
+        # If the kickoff has passed but Sportmonks has not
+        # supplied a recognised live/finished status, keep it
+        # for a limited period.
+        #
+        # This is important because API status updates can
+        # occasionally lag behind the scheduled kick-off.
+        # ----------------------------------------------------
+
+        elif kickoff <= now_utc:
+
+            age_minutes = (
+                now_utc - kickoff
+            ).total_seconds() / 60
+
+            if (
+                age_minutes >
+                LIVE_FALLBACK_MINUTES
+            ):
+
+                print()
+                print(
+                    f"Skipping old fixture "
+                    f"{event.get('id')}: "
+                    f"{int(age_minutes)} minutes old"
+                )
+
+                continue
+
+            print()
+            print(
+                "LIVE FALLBACK FIXTURE"
+            )
+
+            print(
+                "---------------"
+            )
+
+            print(
+                f"Fixture ID: "
+                f"{event.get('id')}"
+            )
+
+            print(
+                f"No recognised live status."
+            )
+
+            print(
+                f"Kick-off was "
+                f"{int(age_minutes)} minutes ago."
+            )
 
         # ----------------------------------------------------
         # Get home and away teams
@@ -623,18 +886,8 @@ def build_fixtures(events):
         # ----------------------------------------------------
         # Find ALL configured clubs involved.
         #
-        # IMPORTANT:
-        #
-        # We deliberately use two independent checks.
-        #
-        # This means:
-        #
-        # Rangers vs Celtic
-        #
-        # is assigned to:
-        #
-        # Rangers TV
-        # Celtic TV
+        # This deliberately allows an Old Firm match to appear
+        # on BOTH Rangers TV and Celtic TV.
         # ----------------------------------------------------
 
         matched_teams = []
@@ -662,27 +915,20 @@ def build_fixtures(events):
         # ----------------------------------------------------
         # FIXTURE STADIUM
         #
-        # The stadium belongs to the fixture, NOT the channel.
+        # Stadium belongs to the fixture, not the channel.
         #
-        # The home team's configured stadium is therefore used.
-        #
-        # Example:
+        # Therefore:
         #
         # Rangers vs Hibernian
         # -> Ibrox Stadium
         #
-        # Rangers TV:
-        # -> Ibrox Stadium
-        #
-        # Hibernian TV:
-        # -> Ibrox Stadium
-        #
-        # If the fixture is:
+        # Both Rangers TV AND Hibernian TV receive
+        # Ibrox Stadium.
         #
         # Hibernian vs Rangers
         # -> Easter Road
         #
-        # Both channels will then show Easter Road.
+        # Both channels receive Easter Road.
         # ----------------------------------------------------
 
         home_team = allowed_teams.get(
@@ -731,7 +977,7 @@ def build_fixtures(events):
                     matched_team["name"],
 
                 "channel_id":
-                    None,
+                    matched_team["channel_id"],
 
                 "home":
                     home,
@@ -751,7 +997,22 @@ def build_fixtures(events):
                     ),
 
                 "tv":
-                    ""
+                    "",
+
+                # Extra information is included
+                # without changing the existing
+                # fields used by xmltv.py.
+
+                "fixture_id":
+                    event.get(
+                        "id"
+                    ),
+
+                "status":
+                    status,
+
+                "live":
+                    live
             }
 
             channel_name = (
@@ -803,6 +1064,16 @@ def build_fixtures(events):
             )
 
             print(
+                f"Sportmonks status: "
+                f"{status or 'UNKNOWN'}"
+            )
+
+            print(
+                f"Live: "
+                f"{live}"
+            )
+
+            print(
                 f"Fixture ID: "
                 f"{event.get('id')}"
             )
@@ -820,14 +1091,49 @@ def build_fixtures(events):
             x["kickoff"]
         )
 
+    # --------------------------------------------------------
+    # Diagnostic summary
+    # --------------------------------------------------------
+
+    print()
+    print("==============================")
+    print("FIXTURE SUMMARY")
+    print("==============================")
+
+    for channel_name, fixtures in (
+        channel_fixtures.items()
+    ):
+
+        print(
+            f"{channel_name}: "
+            f"{len(fixtures)} fixture(s)"
+        )
+
+        for fixture in fixtures:
+
+            live_marker = ""
+
+            if fixture.get(
+                "live"
+            ):
+
+                live_marker = " [LIVE]"
+
+            print(
+                f"  {fixture['kickoff']} - "
+                f"{fixture['home']} vs "
+                f"{fixture['away']}"
+                f"{live_marker}"
+            )
+
     return channel_fixtures
 
 
 # ============================================================
 # CACHE
 #
-# The Sportmonks schedule is downloaded and processed
-# only once during each generator.py run.
+# Sportmonks is downloaded and processed only once during
+# each generator.py run.
 # ============================================================
 
 _SCHEDULE_CACHE = None
@@ -872,7 +1178,7 @@ def get_fixtures(team):
 
     print(
         f"Found {len(fixtures)} "
-        f"upcoming fixtures for "
+        f"upcoming/live fixtures for "
         f"{channel_name}"
     )
 
@@ -883,7 +1189,7 @@ def get_fixtures(team):
     if not fixtures:
 
         print(
-            f"No upcoming fixtures for "
+            f"No upcoming/live fixtures for "
             f"{channel_name}"
         )
 
