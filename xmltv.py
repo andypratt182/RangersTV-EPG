@@ -10,6 +10,13 @@ UK_TZ = ZoneInfo("Europe/London")
 
 MATCH_DURATION = timedelta(hours=2)
 
+LOGO_BASE_URL = (
+    "https://andypratt182.github.io/"
+    "SPFL-EPG/logos/"
+)
+
+LOGO_FOLDER = Path("logos")
+
 
 def add_programme(
     tv,
@@ -74,12 +81,7 @@ def xml_time(dt):
 
 def get_next_match(fixtures, channel_id, after_time):
 
-    sorted_fixtures = sorted(
-        fixtures,
-        key=lambda x: x["kickoff"]
-    )
-
-    for match in sorted_fixtures:
+    for match in fixtures:
 
         if match.get("channel_id") != channel_id:
             continue
@@ -111,12 +113,6 @@ def create_next_game_programme(
 
     if next_match:
 
-        title = (
-            f"Next Game: "
-            f"{next_match['home']} vs "
-            f"{next_match['away']}"
-        )
-
         description = (
             f"{next_match['home']} vs "
             f"{next_match['away']}\n"
@@ -128,13 +124,19 @@ def create_next_game_programme(
             f"{format_kickoff(next_match['kickoff'])}"
         )
 
-    else:
+        title = (
+            f"Next Game: "
+            f"{next_match['home']} vs "
+            f"{next_match['away']}"
+        )
 
-        title = "Next Game"
+    else:
 
         description = (
             "No upcoming fixture"
         )
+
+        title = "Next Game"
 
 
     add_programme(
@@ -163,6 +165,39 @@ def create_channel_entries(tv):
             channel,
             "display-name"
         ).text = team["name"]
+
+
+        # -------------------------------------------------
+        # Automatically assign channel logo
+        # -------------------------------------------------
+
+        logo_file = LOGO_FOLDER / f"{channel_id}.png"
+
+        if logo_file.exists():
+
+            ET.SubElement(
+                channel,
+                "icon",
+                {
+                    "src":
+                        f"{LOGO_BASE_URL}"
+                        f"{channel_id}.png"
+                }
+            )
+
+            print(
+                f"Logo found: "
+                f"{team['name']} "
+                f"-> {logo_file}"
+            )
+
+        else:
+
+            print(
+                f"WARNING: Logo missing for "
+                f"{team['name']} "
+                f"({logo_file})"
+            )
 
 
 def create_xmltv(fixtures, filename):
@@ -199,6 +234,8 @@ def create_xmltv(fixtures, filename):
         hours=240
     )
 
+
+    # Create timeline separately for each club
 
     for channel_id in SPFL_TEAMS:
 
@@ -297,4 +334,4 @@ def create_xmltv(fixtures, filename):
         filename,
         encoding="utf-8",
         xml_declaration=True
-            )
+    )
