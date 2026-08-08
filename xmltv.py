@@ -116,6 +116,45 @@ def create_next_game_programme(
 
     if next_match:
 
+        kickoff = parse_kickoff(
+            next_match["kickoff"]
+        ).astimezone(
+            UK_TZ
+        )
+
+        # -------------------------------------------------
+        # Create the correct ordinal suffix
+        #
+        # 1st, 2nd, 3rd, 4th...
+        # 11th, 12th and 13th are exceptions.
+        # -------------------------------------------------
+
+        day = kickoff.day
+
+        if 11 <= day <= 13:
+
+            suffix = "th"
+
+        else:
+
+            suffix = {
+                1: "st",
+                2: "nd",
+                3: "rd"
+            }.get(
+                day % 10,
+                "th"
+            )
+
+        date_text = (
+            f"{kickoff.strftime('%A')} "
+            f"{day}{suffix}"
+        )
+
+        # -------------------------------------------------
+        # Next Game description
+        # -------------------------------------------------
+
         description = (
             f"{next_match['home']} vs "
             f"{next_match['away']}\n"
@@ -127,10 +166,19 @@ def create_next_game_programme(
             f"{format_kickoff(next_match['kickoff'])}"
         )
 
+        # -------------------------------------------------
+        # Next Game title
+        #
+        # Example:
+        #
+        # Next Game: Rangers vs Hibernian | Sunday 9th
+        # -------------------------------------------------
+
         title = (
             f"Next Game: "
             f"{next_match['home']} vs "
-            f"{next_match['away']}"
+            f"{next_match['away']} "
+            f"| {date_text}"
         )
 
     else:
@@ -219,10 +267,18 @@ def create_xmltv(
 
     create_channel_entries(tv)
 
+    # -----------------------------------------------------
+    # Sort all fixtures by kick-off time
+    # -----------------------------------------------------
+
     fixtures = sorted(
         fixtures,
         key=lambda x: x["kickoff"]
     )
+
+    # -----------------------------------------------------
+    # Current UTC time
+    # -----------------------------------------------------
 
     now = datetime.now(
         timezone.utc
@@ -233,6 +289,10 @@ def create_xmltv(
         second=0,
         microsecond=0
     )
+
+    # -----------------------------------------------------
+    # Generate 240 hours of EPG data
+    # -----------------------------------------------------
 
     epg_end = (
         epg_start +
@@ -264,8 +324,17 @@ def create_xmltv(
                 MATCH_DURATION
             )
 
+            # -------------------------------------------------
+            # Ignore matches that have already finished
+            # -------------------------------------------------
+
             if match_end <= epg_start:
                 continue
+
+            # -------------------------------------------------
+            # Stop processing once we are beyond the EPG
+            # window.
+            # -------------------------------------------------
 
             if kickoff >= epg_end:
                 break
@@ -284,6 +353,10 @@ def create_xmltv(
                     fixtures
                 )
 
+            # -------------------------------------------------
+            # Live match programme
+            # -------------------------------------------------
+
             live_start = max(
                 kickoff,
                 epg_start
@@ -293,12 +366,6 @@ def create_xmltv(
                 match_end,
                 epg_end
             )
-
-            # -------------------------------------------------
-            # Live match programme
-            #
-            # 🔴 added to the end of the title
-            # -------------------------------------------------
 
             add_programme(
                 tv,
@@ -340,7 +407,7 @@ def create_xmltv(
             )
 
     # ---------------------------------------------------------
-    # Save XMLTV
+    # Save XMLTV file
     # ---------------------------------------------------------
 
     Path(filename).parent.mkdir(
@@ -352,4 +419,4 @@ def create_xmltv(
         filename,
         encoding="utf-8",
         xml_declaration=True
-    )
+                )
