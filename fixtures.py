@@ -154,8 +154,8 @@ def verify_2026_27_season(token):
 
             return season
 
-    # We previously confirmed this season ID
-    # works with this Sportmonks account.
+    # The season ID was previously confirmed
+    # and works with this Sportmonks account.
 
     print()
     print(
@@ -283,7 +283,7 @@ def parse_kickoff(value):
 
         return None
 
-    # Sportmonks may occasionally return
+    # Sportmonks can occasionally return
     # a timezone-naive datetime.
 
     if kickoff.tzinfo is None:
@@ -533,7 +533,7 @@ def build_fixtures(events):
         )
 
     # --------------------------------------------------------
-    # Create an empty list for every channel.
+    # Create an empty fixture list for every channel.
     # --------------------------------------------------------
 
     channel_fixtures = {}
@@ -549,7 +549,7 @@ def build_fixtures(events):
         ] = []
 
     # --------------------------------------------------------
-    # Process each fixture once.
+    # Process every Sportmonks fixture once.
     # --------------------------------------------------------
 
     for event in events:
@@ -612,28 +612,40 @@ def build_fixtures(events):
         )
 
         # ----------------------------------------------------
-        # Determine which configured channel(s)
-        # this fixture belongs to.
+        # Find ALL configured clubs involved.
         #
-        # Normally only one configured club will
-        # be involved.
+        # This deliberately uses two independent checks,
+        # NOT if/elif.
+        #
+        # Therefore:
+        #
+        # Rangers vs Celtic
+        #
+        # is assigned to:
+        #
+        # Rangers TV
+        # Celtic TV
         # ----------------------------------------------------
 
-        matched_team = None
+        matched_teams = []
 
         if home_key in allowed_teams:
 
-            matched_team = allowed_teams[
-                home_key
-            ]
+            matched_teams.append(
+                allowed_teams[
+                    home_key
+                ]
+            )
 
-        elif away_key in allowed_teams:
+        if away_key in allowed_teams:
 
-            matched_team = allowed_teams[
-                away_key
-            ]
+            matched_teams.append(
+                allowed_teams[
+                    away_key
+                ]
+            )
 
-        if matched_team is None:
+        if not matched_teams:
 
             continue
 
@@ -658,97 +670,106 @@ def build_fixtures(events):
             )
 
         # ----------------------------------------------------
-        # Stadium
+        # Add the fixture to every relevant channel.
         # ----------------------------------------------------
 
-        stadium = matched_team[
-            "stadium"
-        ]
+        for matched_team in matched_teams:
 
-        # ----------------------------------------------------
-        # Preserve existing output structure
-        # ----------------------------------------------------
+            # Keep stadium based on the channel's
+            # configured club.
 
-        fixture = {
+            stadium = matched_team[
+                "stadium"
+            ]
 
-            "channel":
-                matched_team["name"],
+            # ------------------------------------------------
+            # Preserve existing output structure.
+            # ------------------------------------------------
 
-            "channel_id":
-                None,
+            fixture = {
 
-            "home":
-                home,
+                "channel":
+                    matched_team["name"],
 
-            "away":
-                away,
+                "channel_id":
+                    None,
 
-            "competition":
-                competition,
+                "home":
+                    home,
 
-            "stadium":
-                stadium,
+                "away":
+                    away,
 
-            "kickoff":
-                kickoff.strftime(
-                    "%Y%m%d%H%M%S +0000"
-                ),
+                "competition":
+                    competition,
 
-            "tv":
-                ""
-        }
+                "stadium":
+                    stadium,
 
-        channel_name = (
-            matched_team["name"]
-        )
+                "kickoff":
+                    kickoff.strftime(
+                        "%Y%m%d%H%M%S +0000"
+                    ),
 
-        channel_fixtures[
-            channel_name
-        ].append(
-            fixture
-        )
+                "tv":
+                    ""
+            }
 
-        print()
-        print(
-            "MATCHED FIXTURE"
-        )
+            channel_name = (
+                matched_team["name"]
+            )
 
-        print(
-            "---------------"
-        )
+            channel_fixtures[
+                channel_name
+            ].append(
+                fixture
+            )
 
-        print(
-            f"Channel: "
-            f"{channel_name}"
-        )
+            # ------------------------------------------------
+            # Diagnostic output
+            # ------------------------------------------------
 
-        print(
-            f"Match: "
-            f"{home} vs {away}"
-        )
+            print()
+            print(
+                "MATCHED FIXTURE"
+            )
 
-        print(
-            f"Competition: "
-            f"{competition}"
-        )
+            print(
+                "---------------"
+            )
 
-        print(
-            f"Stadium: "
-            f"{stadium}"
-        )
+            print(
+                f"Channel: "
+                f"{channel_name}"
+            )
 
-        print(
-            f"Kick-off UK: "
-            f"{kickoff_uk.strftime('%Y-%m-%d %H:%M')}"
-        )
+            print(
+                f"Match: "
+                f"{home} vs {away}"
+            )
 
-        print(
-            f"Fixture ID: "
-            f"{event.get('id')}"
-        )
+            print(
+                f"Competition: "
+                f"{competition}"
+            )
+
+            print(
+                f"Stadium: "
+                f"{stadium}"
+            )
+
+            print(
+                f"Kick-off UK: "
+                f"{kickoff_uk.strftime('%Y-%m-%d %H:%M')}"
+            )
+
+            print(
+                f"Fixture ID: "
+                f"{event.get('id')}"
+            )
 
     # --------------------------------------------------------
-    # Sort each channel's fixtures
+    # Sort each channel chronologically.
     # --------------------------------------------------------
 
     for channel_name in channel_fixtures:
@@ -766,8 +787,8 @@ def build_fixtures(events):
 # ============================================================
 # CACHE
 #
-# The schedule is downloaded only once during
-# a generator.py run.
+# The Sportmonks schedule is downloaded and processed
+# only once during each generator.py run.
 # ============================================================
 
 _SCHEDULE_CACHE = None
@@ -785,7 +806,7 @@ def get_fixtures(team):
     global _FIXTURE_CACHE
 
     # --------------------------------------------------------
-    # Download/process schedule only once.
+    # Download and process the schedule only once.
     # --------------------------------------------------------
 
     if _FIXTURE_CACHE is None:
