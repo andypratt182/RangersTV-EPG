@@ -154,8 +154,8 @@ def verify_2026_27_season(token):
 
             return season
 
-    # The season ID was previously confirmed
-    # and works with this Sportmonks account.
+    # The 2026/27 season ID has previously
+    # been confirmed to work with the account.
 
     print()
     print(
@@ -529,7 +529,8 @@ def build_fixtures(events):
 
         print(
             f"  {value['name']} "
-            f"-> '{key}'"
+            f"-> Sportmonks match name key: "
+            f"'{key}'"
         )
 
     # --------------------------------------------------------
@@ -568,7 +569,9 @@ def build_fixtures(events):
             UK_TZ
         )
 
+        # ----------------------------------------------------
         # Date window
+        # ----------------------------------------------------
 
         if kickoff_uk.date() < start_date:
 
@@ -578,11 +581,17 @@ def build_fixtures(events):
 
             continue
 
+        # ----------------------------------------------------
         # Already played
+        # ----------------------------------------------------
 
         if kickoff <= now_utc:
 
             continue
+
+        # ----------------------------------------------------
+        # Get home and away teams
+        # ----------------------------------------------------
 
         home, away = get_participants(
             event
@@ -614,10 +623,11 @@ def build_fixtures(events):
         # ----------------------------------------------------
         # Find ALL configured clubs involved.
         #
-        # This deliberately uses two independent checks,
-        # NOT if/elif.
+        # IMPORTANT:
         #
-        # Therefore:
+        # We deliberately use two independent checks.
+        #
+        # This means:
         #
         # Rangers vs Celtic
         #
@@ -650,6 +660,46 @@ def build_fixtures(events):
             continue
 
         # ----------------------------------------------------
+        # FIXTURE STADIUM
+        #
+        # The stadium belongs to the fixture, NOT the channel.
+        #
+        # The home team's configured stadium is therefore used.
+        #
+        # Example:
+        #
+        # Rangers vs Hibernian
+        # -> Ibrox Stadium
+        #
+        # Rangers TV:
+        # -> Ibrox Stadium
+        #
+        # Hibernian TV:
+        # -> Ibrox Stadium
+        #
+        # If the fixture is:
+        #
+        # Hibernian vs Rangers
+        # -> Easter Road
+        #
+        # Both channels will then show Easter Road.
+        # ----------------------------------------------------
+
+        home_team = allowed_teams.get(
+            home_key
+        )
+
+        if home_team:
+
+            stadium = home_team[
+                "stadium"
+            ]
+
+        else:
+
+            stadium = "Venue TBC"
+
+        # ----------------------------------------------------
         # Competition
         # ----------------------------------------------------
 
@@ -670,21 +720,10 @@ def build_fixtures(events):
             )
 
         # ----------------------------------------------------
-        # Add the fixture to every relevant channel.
+        # Add fixture to EVERY relevant channel.
         # ----------------------------------------------------
 
         for matched_team in matched_teams:
-
-            # Keep stadium based on the channel's
-            # configured club.
-
-            stadium = matched_team[
-                "stadium"
-            ]
-
-            # ------------------------------------------------
-            # Preserve existing output structure.
-            # ------------------------------------------------
 
             fixture = {
 
