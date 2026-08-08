@@ -14,6 +14,9 @@ UK_TZ = ZoneInfo("Europe/London")
 
 FIXTURE_DAYS = 24
 
+# Scottish Premiership
+SCOTTISH_PREMIERSHIP_ID = 501
+
 
 # ============================================================
 # SPORTMONKS API HELPER
@@ -65,7 +68,7 @@ def sportmonks_get(endpoint, token, params=None):
 
         print(
             "Response:",
-            response.text[:2000]
+            response.text[:3000]
         )
 
         print()
@@ -77,135 +80,19 @@ def sportmonks_get(endpoint, token, params=None):
 
 
 # ============================================================
-# FIND SCOTTISH PREMIERSHIP
-# ============================================================
-
-def find_scottish_premiership(token):
-
-    print()
-    print("==============================")
-    print("Searching for Scottish Premiership")
-    print("==============================")
-
-
-    data = sportmonks_get(
-        "leagues/search/Premiership",
-        token
-    )
-
-
-    leagues = data.get(
-        "data",
-        []
-    )
-
-
-    if not leagues:
-
-        raise RuntimeError(
-            "Sportmonks returned no leagues "
-            "matching Premiership."
-        )
-
-
-    print(
-        f"Found {len(leagues)} matching league(s)"
-    )
-
-
-    for league in leagues:
-
-        print(
-            f"  ID {league.get('id')}: "
-            f"{league.get('name')}"
-        )
-
-
-    # Prefer an exact Scottish Premiership match
-    for league in leagues:
-
-        name = (
-            league.get("name") or ""
-        ).lower()
-
-
-        country = (
-            league.get("country") or {}
-        ).get(
-            "name",
-            ""
-        ).lower()
-
-
-        if (
-            "premiership" in name
-            and "scotland" in country
-        ):
-
-            print()
-            print(
-                "Selected league:"
-            )
-
-            print(
-                f"  ID: {league['id']}"
-            )
-
-            print(
-                f"  Name: {league.get('name')}"
-            )
-
-            print(
-                f"  Country: "
-                f"{(league.get('country') or {}).get('name')}"
-            )
-
-
-            return league
-
-
-    # Fallback if country isn't included
-    for league in leagues:
-
-        name = (
-            league.get("name") or ""
-        ).lower()
-
-
-        if name == "premiership":
-
-            print()
-            print(
-                "WARNING: Using Premiership "
-                "league based on name only."
-            )
-
-
-            return league
-
-
-    raise RuntimeError(
-        "Could not identify Scottish Premiership."
-    )
-
-
-# ============================================================
 # FIND 2026/27 SEASON
 # ============================================================
 
-def find_2026_27_season(
-    token,
-    league_id
-):
+def find_2026_27_season(token):
 
     print()
     print("==============================")
-    print("Finding 2026/27 season")
+    print("Finding Scottish Premiership season")
     print("==============================")
 
 
     data = sportmonks_get(
-        f"leagues/{league_id}",
+        f"leagues/{SCOTTISH_PREMIERSHIP_ID}",
         token,
         {
             "include": "seasons"
@@ -232,34 +119,20 @@ def find_2026_27_season(
 
     for season in seasons:
 
-        season_id = season.get(
-            "id"
-        )
-
-        season_name = season.get(
-            "name",
-            ""
-        )
-
-
         print(
-            f"  ID {season_id}: "
-            f"{season_name}"
+            f"  ID {season.get('id')}: "
+            f"{season.get('name')}"
         )
-
-
-    # Accept either common naming format
-    target_names = {
-        "2026/2027",
-        "2026/27"
-    }
 
 
     for season in seasons:
 
         if season.get(
             "name"
-        ) in target_names:
+        ) in (
+            "2026/2027",
+            "2026/27"
+        ):
 
             print()
             print(
@@ -278,43 +151,11 @@ def find_2026_27_season(
             return season
 
 
-    print()
-    print(
-        "WARNING: Sportmonks does not currently "
-        "provide a 2026/27 Scottish Premiership "
-        "season for this account."
+    raise RuntimeError(
+        "Sportmonks does not currently "
+        "provide the 2026/27 Scottish "
+        "Premiership season."
     )
-
-    print(
-        "The latest available season is:"
-    )
-
-
-    if seasons:
-
-        latest = max(
-            seasons,
-            key=lambda x: x.get("name", "")
-        )
-
-
-        print(
-            f"  ID: {latest.get('id')}"
-        )
-
-        print(
-            f"  Name: {latest.get('name')}"
-        )
-
-
-    print()
-    print(
-        "No season-specific filtering will be "
-        "applied until 2026/27 becomes available."
-    )
-
-
-    return None
 
 
 # ============================================================
@@ -331,9 +172,17 @@ def normalise_team_name(name):
     name = name.lower().strip()
 
 
-    # Remove common suffixes only.
-    # DO NOT remove arbitrary words such as "the",
-    # because they can occur inside legitimate names.
+    # Only remove suffixes.
+    #
+    # Do NOT remove words such as "the".
+    # For example:
+    #
+    # Motherwell -> motherwell
+    #
+    # not:
+    #
+    # morwell
+
     replacements = [
         " football club",
         " fc"
@@ -476,7 +325,7 @@ def get_participants(event):
 
 
 # ============================================================
-# PARSE SPORTMONKS DATETIME SAFELY
+# PARSE SPORTMONKS DATETIME
 # ============================================================
 
 def parse_kickoff(value):
@@ -506,10 +355,11 @@ def parse_kickoff(value):
         return None
 
 
-    # Sportmonks may return a datetime
+    # Sportmonks can return a timestamp
     # without timezone information.
     #
-    # Treat naive Sportmonks values as UTC.
+    # Treat it as UTC.
+
     if kickoff.tzinfo is None:
 
         kickoff = kickoff.replace(
@@ -527,8 +377,8 @@ def parse_kickoff(value):
 def get_fixtures(team):
 
     """
-    Get upcoming Scottish fixtures for one
-    configured SPFL channel.
+    Get upcoming Scottish Premiership fixtures
+    using Sportmonks.
 
     Output structure remains compatible with
     generator.py and xmltv.py.
@@ -579,67 +429,62 @@ def get_fixtures(team):
 
 
     # --------------------------------------------------------
-    # League
+    # Get 2026/27 season
     # --------------------------------------------------------
 
-    league = find_scottish_premiership(
+    season = find_2026_27_season(
         token
     )
 
 
-    league_id = league[
+    season_id = season[
         "id"
     ]
 
 
-    # --------------------------------------------------------
-    # Season
-    # --------------------------------------------------------
-
-    season = find_2026_27_season(
-        token,
-        league_id
+    print()
+    print(
+        "Using season ID:",
+        season_id
     )
 
 
     # --------------------------------------------------------
-    # Retrieve fixtures
+    # Retrieve season fixtures
+    #
+    # IMPORTANT:
+    # We deliberately do NOT use:
+    #
+    # filters=seasonId:28275
+    #
+    # because Sportmonks rejected that filter.
+    #
+    # Instead we use the season endpoint.
     # --------------------------------------------------------
 
     print()
     print("==============================")
-    print("Downloading fixtures")
+    print(
+        "Downloading 2026/27 "
+        "Scottish Premiership fixtures"
+    )
     print("==============================")
 
 
     endpoint = (
-        f"fixtures/between/"
-        f"{start_date}/"
-        f"{end_date}"
+        f"fixtures/seasons/{season_id}"
     )
-
-
-    params = {
-        "include": (
-            "participants;"
-            "league"
-        )
-    }
-
-
-    # If the 2026/27 season exists,
-    # restrict the request to it.
-    if season:
-
-        params[
-            "filters"
-        ] = f"seasonId:{season['id']}"
 
 
     data = sportmonks_get(
         endpoint,
         token,
-        params
+        {
+            "include": (
+                "participants;"
+                "league"
+            )
+        }
     )
 
 
@@ -651,8 +496,20 @@ def get_fixtures(team):
 
     print(
         f"Sportmonks returned "
-        f"{len(events)} fixture(s)"
+        f"{len(events)} fixture(s) "
+        f"for season {season_id}"
     )
+
+
+    if not events:
+
+        print()
+        print(
+            "WARNING: No fixtures returned "
+            "for the 2026/27 season."
+        )
+
+        return []
 
 
     # --------------------------------------------------------
@@ -682,7 +539,7 @@ def get_fixtures(team):
 
 
     # --------------------------------------------------------
-    # Process events
+    # Process fixtures
     # --------------------------------------------------------
 
     for event in events:
@@ -698,6 +555,29 @@ def get_fixtures(team):
 
             continue
 
+
+        # Ignore matches outside our requested
+        # 24-day window.
+
+        if kickoff < datetime.combine(
+            start_date,
+            datetime.min.time(),
+            tzinfo=UK_TZ
+        ):
+
+            continue
+
+
+        if kickoff > datetime.combine(
+            end_date,
+            datetime.max.time(),
+            tzinfo=UK_TZ
+        ):
+
+            continue
+
+
+        # Ignore completed fixtures.
 
         if kickoff <= now:
 
@@ -768,7 +648,7 @@ def get_fixtures(team):
 
         competition = event_league.get(
             "name",
-            "Scottish Premiership"
+            "Premiership"
         )
 
 
@@ -816,6 +696,10 @@ def get_fixtures(team):
         )
 
 
+        # ----------------------------------------------------
+        # Diagnostic output
+        # ----------------------------------------------------
+
         print()
         print(
             "MATCHED FIXTURE"
@@ -848,6 +732,11 @@ def get_fixtures(team):
         print(
             f"Kick-off UK: "
             f"{kickoff.astimezone(UK_TZ)}"
+        )
+
+        print(
+            f"Fixture ID: "
+            f"{event.get('id')}"
         )
 
 
